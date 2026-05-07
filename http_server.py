@@ -1,5 +1,6 @@
 """HTTP server for VRChat ShockingManager compatibility."""
 import json
+import socket
 import threading
 import logging
 from http.server import HTTPServer, BaseHTTPRequestHandler
@@ -121,6 +122,14 @@ class ShockHandler(BaseHTTPRequestHandler):
         self.wfile.write(body)
 
 
+class ReusableHTTPServer(HTTPServer):
+    allow_reuse_address = True
+
+    def server_bind(self):
+        self.socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        super().server_bind()
+
+
 class HttpServer:
     """Runs the HTTP server in a background thread."""
 
@@ -132,10 +141,7 @@ class HttpServer:
     def start(self, app):
         ShockHandler.app = app
         try:
-            import socket
-            HTTPServer.allow_reuse_address = True
-            self._server = HTTPServer(("0.0.0.0", self._port), ShockHandler)
-            self._server.socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+            self._server = ReusableHTTPServer(("0.0.0.0", self._port), ShockHandler)
             self._thread = threading.Thread(target=self._server.serve_forever, daemon=True)
             self._thread.start()
             logger.info(f"HTTP server started on port {self._port}")
@@ -148,6 +154,9 @@ class HttpServer:
         if self._server:
             try:
                 self._server.shutdown()
+            except Exception:
+                pass
+            try:
                 self._server.server_close()
             except Exception:
                 pass

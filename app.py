@@ -353,14 +353,9 @@ class App:
 
             class ReusableOSCUDPServer(osc_server.ThreadingOSCUDPServer):
                 allow_reuse_address = True
-                allow_reuse_port = True
 
                 def server_bind(self):
                     self.socket.setsockopt(_sock.SOL_SOCKET, _sock.SO_REUSEADDR, 1)
-                    try:
-                        self.socket.setsockopt(_sock.SOL_SOCKET, _sock.SO_REUSEPORT, 1)
-                    except (AttributeError, OSError):
-                        pass
                     super().server_bind()
 
             self._osc_server = ReusableOSCUDPServer(
@@ -379,6 +374,9 @@ class App:
         if self._osc_server:
             try:
                 self._osc_server.shutdown()
+            except Exception:
+                pass
+            try:
                 self._osc_server.server_close()
             except Exception:
                 pass
