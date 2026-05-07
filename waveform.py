@@ -35,13 +35,13 @@ def generate_gradual(seconds: int, intensity: int) -> list[str]:
 
 
 def generate_waveform(seconds: int, intensity: int, mode: str = "instant",
-                      waveform_mode: str = "library") -> list[str]:
+                      waveform_mode: str = "library",
+                      custom_waveform: str = "") -> list[str]:
     """Generate waveform based on seconds, intensity, and mode.
 
     waveform_mode:
-        "library" - use preset waveforms from library
-        "instant" - one-shot full intensity
-        "gradual" - ramp up
+        "library" - use random preset waveforms from library
+        "custom" - use specific preset chosen by user
     """
     seconds = max(1, min(10, seconds))
     intensity = _clamp(intensity)
@@ -50,6 +50,11 @@ def generate_waveform(seconds: int, intensity: int, mode: str = "instant",
         name, preset = get_random_for_second(seconds)
         scaled = scale_waveform(preset, intensity)
         return loop_waveform(scaled, seconds * 10)
+    elif waveform_mode == "custom" and custom_waveform:
+        preset = get_preset(custom_waveform)
+        if preset:
+            scaled = scale_waveform(preset, intensity)
+            return loop_waveform(scaled, seconds * 10)
     elif mode == "gradual":
         return generate_gradual(seconds, intensity)
     return generate_one_shot(seconds, intensity)
@@ -73,7 +78,8 @@ def waveform_to_display_data(entries: list[str]) -> list[int]:
 
 def generate_ab_waveforms(seconds: int, a_intensity: int, b_intensity: int,
                           mode: str = "instant", waveform_mode: str = "library",
-                          alternate: bool = True) -> tuple[list[str], list[str], str, str]:
+                          alternate: bool = True,
+                          custom_waveform: str = "") -> tuple[list[str], list[str], str, str]:
     """Generate waveforms for both A and B channels.
     Returns (a_wave, b_wave, a_preset_name, b_preset_name)
     If alternate=True, A and B use different random presets.
@@ -81,21 +87,31 @@ def generate_ab_waveforms(seconds: int, a_intensity: int, b_intensity: int,
     a_name = ""
     b_name = ""
 
-    if waveform_mode == "library":
-        if alternate:
+    if waveform_mode == "library" or waveform_mode == "custom":
+        if waveform_mode == "custom" and custom_waveform:
+            a_data = get_preset(custom_waveform)
+            b_data = get_preset(custom_waveform)
+            a_name = custom_waveform
+            b_name = custom_waveform
+            if not a_data:
+                a_data = get_random_for_second(seconds)[1]
+                a_name = ""
+            if not b_data:
+                b_data = get_random_for_second(seconds)[1]
+                b_name = ""
+        elif alternate:
             a_name, a_data = get_random_for_second(seconds)
             b_name, b_data = get_random_for_second(seconds)
             attempts = 0
             while b_name == a_name and attempts < 5:
                 b_name, b_data = get_random_for_second(seconds)
                 attempts += 1
-            a_wave = loop_waveform(scale_waveform(a_data, a_intensity), seconds * 10)
-            b_wave = loop_waveform(scale_waveform(b_data, b_intensity), seconds * 10)
         else:
             a_name, a_data = get_random_for_second(seconds)
             b_name = a_name
-            a_wave = loop_waveform(scale_waveform(a_data, a_intensity), seconds * 10)
-            b_wave = loop_waveform(scale_waveform(a_data, b_intensity), seconds * 10)
+            b_data = a_data
+        a_wave = loop_waveform(scale_waveform(a_data, a_intensity), seconds * 10)
+        b_wave = loop_waveform(scale_waveform(b_data, b_intensity), seconds * 10)
     else:
         a_wave = generate_waveform(seconds, a_intensity, mode, waveform_mode)
         b_wave = generate_waveform(seconds, b_intensity, mode, waveform_mode)

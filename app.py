@@ -29,6 +29,7 @@ class App:
         self._shock_recent_events = []  # [(timestamp, seconds), ...] for 1s window safety
         self._waveform_name_a = ""
         self._waveform_name_b = ""
+        self._waveform_feeder_running = False
         self._http_server = HttpServer(port=self._settings.get("http_port", 9002))
 
     def run(self):
@@ -123,8 +124,10 @@ class App:
             self._shock_remaining_b = seconds
         self._shock_end_time = now + self._shock_remaining_a
 
+        custom_wf = self._window.settings_panel.get_custom_waveform() if wf_mode == "custom" else ""
         a_wave, b_wave, a_name, b_name = generate_ab_waveforms(
             seconds, a_intensity, b_intensity, ui_mode, wf_mode, alternate=True,
+            custom_waveform=custom_wf,
         )
         self._waveform_name_a = a_name
         self._waveform_name_b = b_name
@@ -152,11 +155,38 @@ class App:
                 f"{'一键开火' if ui_mode == 'instant' else '温柔加力'}",
                 "shock",
             )
+            self._start_waveform_feeder()
         else:
             self._log_to_console(
                 f"电击: {seconds}秒 A:{a_intensity} B:{b_intensity} (未发送-等待APP连接)",
                 "shock",
             )
+
+    def _start_waveform_feeder(self):
+        if not self._waveform_feeder_running:
+            self._waveform_feeder_running = True
+            self._waveform_feeder()
+
+    def _waveform_feeder(self):
+        import time as _time
+        now = _time.time()
+        if now >= self._shock_end_time or not self._ws_client or not self._ws_client.is_paired:
+            self._waveform_feeder_running = False
+            return
+        ui_mode = self._window.settings_panel.get_mode()
+        wf_mode = self._window.settings_panel.get_waveform_mode()
+        a_limit = self._window.settings_panel.get_a_limit()
+        b_limit = self._window.settings_panel.get_b_limit()
+        custom_wf = self._window.settings_panel.get_custom_waveform() if wf_mode == "custom" else ""
+        # Send 1-second chunks
+        chunk_sec = min(1, int(self._shock_end_time - now) + 1)
+        a_wave, b_wave, _, _ = generate_ab_waveforms(
+            chunk_sec, a_limit, b_limit, ui_mode, wf_mode, alternate=True,
+            custom_waveform=custom_wf,
+        )
+        self._ws_client.send_waveform("A", a_wave, duration=chunk_sec)
+        self._ws_client.send_waveform("B", b_wave, duration=chunk_sec)
+        self._window.after(1000, self._waveform_feeder)
 
     def _on_log_line(self, line: str):
         if "[DGLABCheeseShocking]" in line:
@@ -471,9 +501,11 @@ class App:
         # Only clear if no shock is currently playing
         should_clear = now >= self._shock_end_time
         # Determine which channels to send
+        custom_wf = self._window.settings_panel.get_custom_waveform() if wf_mode == "custom" else ""
         if mode == 0:  # A only
             a_wave, _, a_name, _ = generate_ab_waveforms(
                 seconds, a_intensity, 0, ui_mode, wf_mode, alternate=False,
+                custom_waveform=custom_wf,
             )
             self._waveform_name_a = a_name
             self._waveform_name_b = ""
@@ -483,6 +515,7 @@ class App:
         elif mode == 1:  # B only
             b_wave, _, _, b_name = generate_ab_waveforms(
                 seconds, 0, b_intensity, ui_mode, wf_mode, alternate=False,
+                custom_waveform=custom_wf,
             )
             self._waveform_name_a = ""
             self._waveform_name_b = b_name
@@ -492,6 +525,7 @@ class App:
         else:  # AB both
             a_wave, b_wave, a_name, b_name = generate_ab_waveforms(
                 seconds, a_intensity, b_intensity, ui_mode, wf_mode, alternate=True,
+                custom_waveform=custom_wf,
             )
             self._waveform_name_a = a_name
             self._waveform_name_b = b_name
@@ -517,6 +551,7 @@ class App:
         self._window.settings_panel.set_mode(s.get("mode", "instant"))
         self._window.settings_panel.set_channel(s.get("channel", "A"))
         self._window.settings_panel.set_waveform_mode(s.get("waveform_mode", "library"))
+        self._window.settings_panel.set_custom_waveform(s.get("custom_waveform", ""))
         self._window.mapping_panel.set_mapping(s.get("seconds_mapping", {}))
         self._window.osc_panel.set_chatbox_port(s.get("osc_port", 9000))
         self._window.osc_panel.set_avatar_port(s.get("avatar_osc_port", 9001))
@@ -535,6 +570,7 @@ class App:
         s.set("mode", self._window.settings_panel.get_mode())
         s.set("channel", self._window.settings_panel.get_channel())
         s.set("waveform_mode", self._window.settings_panel.get_waveform_mode())
+        s.set("custom_waveform", self._window.settings_panel.get_custom_waveform())
         s.set("osc_port", self._window.osc_panel.get_chatbox_port())
         s.set("avatar_osc_port", self._window.osc_panel.get_avatar_port())
         s.set("avatar_channel_a_mode", self._window.osc_panel.get_mode_a())

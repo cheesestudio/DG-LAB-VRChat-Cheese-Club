@@ -146,9 +146,12 @@ class SettingsPanel(tk.Frame):
         )
         self._gradual_rb.pack(side="left")
 
-        # Waveform mode
-        wf_frame = tk.Frame(self, bg=t.get("bg_panel", "#1a1a2e"))
-        wf_frame.pack(fill="x", padx=8, pady=2)
+        # Waveform mode (wrapped in a group frame for correct show/hide ordering)
+        self._wf_group = tk.Frame(self, bg=t.get("bg_panel", "#1a1a2e"))
+        self._wf_group.pack(fill="x", padx=8, pady=2)
+
+        wf_frame = tk.Frame(self._wf_group, bg=t.get("bg_panel", "#1a1a2e"))
+        wf_frame.pack(fill="x")
 
         tk.Label(
             wf_frame, text="波形:", bg=t.get("bg_panel", "#1a1a2e"),
@@ -164,9 +167,42 @@ class SettingsPanel(tk.Frame):
                 fg=t.get("text_secondary", "#b0b0b0"),
                 selectcolor=t.get("bg_button", "#0f3460"),
                 activebackground=t.get("bg_panel", "#1a1a2e"),
-                font=("Microsoft YaHei UI", 9), command=self._on_mode_change,
+                font=("Microsoft YaHei UI", 9), command=self._on_wf_mode_change,
             )
             rb.pack(side="left", padx=(0, 6))
+
+        # Custom waveform preset selector (inside same group, hidden by default)
+        from waveform_library import get_names
+        self._wf_names = get_names()
+
+        self._custom_wf_frame = tk.Frame(self._wf_group, bg=t.get("bg_panel", "#1a1a2e"))
+
+        tk.Label(
+            self._custom_wf_frame, text="选择:", bg=t.get("bg_panel", "#1a1a2e"),
+            fg=t.get("text_secondary", "#b0b0b0"),
+            font=("Microsoft YaHei UI", 9),
+        ).pack(side="left")
+
+        self._custom_wf_var = tk.StringVar(value=self._wf_names[0] if self._wf_names else "")
+        self._custom_wf_cb = tk.OptionMenu(
+            self._custom_wf_frame, self._custom_wf_var, *self._wf_names,
+        )
+        self._custom_wf_cb.configure(
+            bg=t.get("bg_button", "#0f3460"),
+            fg=t.get("text_primary", "#e0e0e0"),
+            activebackground=t.get("bg_button_hover", "#1a5276"),
+            activeforeground=t.get("text_primary", "#e0e0e0"),
+            highlightthickness=0, relief="flat",
+            font=("Microsoft YaHei UI", 8),
+        )
+        self._custom_wf_cb["menu"].configure(
+            bg=t.get("bg_button", "#0f3460"),
+            fg=t.get("text_primary", "#e0e0e0"),
+            activebackground=t.get("bg_button_hover", "#1a5276"),
+            font=("Microsoft YaHei UI", 8),
+        )
+        self._custom_wf_cb.pack(side="left", padx=(4, 0))
+        self._update_custom_wf_visibility()
 
         # Channel selection
         ch_frame = tk.Frame(self, bg=t.get("bg_panel", "#1a1a2e"))
@@ -299,6 +335,16 @@ class SettingsPanel(tk.Frame):
     def _on_mode_change(self):
         self._on_change()
 
+    def _on_wf_mode_change(self):
+        self._update_custom_wf_visibility()
+        self._on_change()
+
+    def _update_custom_wf_visibility(self):
+        if self._wf_var.get() == "custom":
+            self._custom_wf_frame.pack(fill="x", padx=8, pady=2)
+        else:
+            self._custom_wf_frame.pack_forget()
+
     def _on_channel_change(self):
         self._on_change()
 
@@ -320,6 +366,9 @@ class SettingsPanel(tk.Frame):
     def get_waveform_mode(self) -> str:
         return self._wf_var.get()
 
+    def get_custom_waveform(self) -> str:
+        return self._custom_wf_var.get()
+
     def set_a_limit(self, value: int):
         self._a_limit_var.set(value)
         self._a_limit_label.configure(text=str(value))
@@ -336,6 +385,11 @@ class SettingsPanel(tk.Frame):
 
     def set_waveform_mode(self, mode: str):
         self._wf_var.set(mode)
+        self._update_custom_wf_visibility()
+
+    def set_custom_waveform(self, name: str):
+        if name in self._wf_names:
+            self._custom_wf_var.set(name)
 
     def get_custom_chatbox(self) -> str:
         return self._custom_text.get("1.0", "end-1c").strip()

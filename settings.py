@@ -22,6 +22,7 @@ DEFAULT_SETTINGS = {
     "chatbox_send_interval": 3,
     "chatbox_enabled": True,
     "custom_chatbox": "我是Saob",
+    "custom_waveform": "",
     "chatbox_toggles": {"line1": True, "line2": True, "line3": True, "line4": True, "line5": True},
     "http_port": 8800,
     # Avatar OSC settings (compatible with Shocking-VRChat)
