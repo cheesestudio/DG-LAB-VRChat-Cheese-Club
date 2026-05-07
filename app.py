@@ -105,14 +105,16 @@ class App:
         if seconds <= 0:
             self._log_to_console(f"安全限制: 1秒内累计已超10秒，忽略本次电击", "warning")
             return
-        # 30-second total cap
+        # 30-second total cap (always enforce, even across shock gaps)
         if now < self._shock_end_time:
             current_remaining = self._shock_end_time - now
-            if current_remaining + seconds > 30:
-                seconds = max(0, 30 - current_remaining)
-                if seconds <= 0:
-                    self._log_to_console("安全限制: 总时长已达30秒上限", "warning")
-                    return
+        else:
+            current_remaining = 0
+        if current_remaining + seconds > 30:
+            seconds = max(0, 30 - current_remaining)
+            if seconds <= 0:
+                self._log_to_console("安全限制: 总时长已达30秒上限", "warning")
+                return
         if now < self._shock_end_time:
             self._shock_remaining_a += seconds
             self._shock_remaining_b += seconds
@@ -444,13 +446,15 @@ class App:
             self._shock_recent_events[-1] = (now, seconds)
         if seconds <= 0:
             return
-        # 30-second total cap
+        # 30-second total cap (always enforce, even across shock gaps)
         if now < self._shock_end_time:
             current_remaining = self._shock_end_time - now
-            if current_remaining + seconds > 30:
-                seconds = max(0, 30 - current_remaining)
-                if seconds <= 0:
-                    return
+        else:
+            current_remaining = 0
+        if current_remaining + seconds > 30:
+            seconds = max(0, 30 - current_remaining)
+            if seconds <= 0:
+                return
         if now < self._shock_end_time:
             self._shock_remaining_a += seconds
             self._shock_remaining_b += seconds
