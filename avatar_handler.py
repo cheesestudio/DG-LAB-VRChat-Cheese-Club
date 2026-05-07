@@ -187,10 +187,12 @@ class AvatarChannelHandler:
     def on_osc(self, address: str, *args):
         """Called when an OSC message arrives."""
         val = self.sanitize_value(args)
-        logger.debug(f"Avatar CH{self.channel}: {address} = {val}")
+        logger.info(f"[Avatar] CH{self.channel} mode={self.mode}: {address} = {val}")
         self._cleared = False
         self._clear_time = time.time() + self._handler_impl.clear_timeout
         self._handler_impl.on_value(val)
+        if self.mode == "distance":
+            logger.info(f"[Avatar] CH{self.channel} strength now: {self._handler_impl.current_strength}")
 
     def check_clear(self) -> bool:
         """Returns True if channel should be cleared."""
@@ -282,6 +284,7 @@ class AvatarManager:
     async def _wave_feeder(self, channel: str):
         """Background task that continuously feeds waveforms for distance/touch modes."""
         interval = 0.05  # 50ms tick
+        logger.info(f"[Avatar] wave_feeder started for CH{channel}")
         while self._running:
             await asyncio.sleep(interval)
             handler = self._channels.get(channel)
@@ -289,6 +292,7 @@ class AvatarManager:
                 continue
             wave = handler.get_wave()
             if wave:
+                logger.info(f"[Avatar] CH{channel} sending wave: {wave[:60]}")
                 self._on_wave(channel, wave)
 
     async def _clear_checker(self):
