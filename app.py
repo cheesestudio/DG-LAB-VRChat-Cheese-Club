@@ -52,14 +52,27 @@ class App:
             self._log_to_console(f"HTTP 服务已启动 (端口:{self._settings.get('http_port', 9002)})", "info")
         self._window.run()
 
+    @staticmethod
+    def _port_in_use(port: int) -> bool:
+        import socket
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+            try:
+                s.bind(("0.0.0.0", port))
+                return False
+            except OSError:
+                return True
+
     def _auto_connect(self):
         """Auto-start all connections on startup."""
-        # Update connection panel button state
         self._window.connection_panel._start_btn.configure(state="disabled")
         self._window.connection_panel._stop_btn.configure(state="normal")
         # Start WebSocket server
-        self.on_connect()
-        # Start OSC (chatbox + avatar) - update button state first
+        port = self._window.connection_panel.get_port()
+        if self._port_in_use(port):
+            self._log_to_console(f"端口 {port} 已被占用，跳过WebSocket启动", "warning")
+        else:
+            self.on_connect()
+        # Start OSC (chatbox + avatar)
         def _start_osc_auto():
             self._window.osc_panel._connect_btn.configure(state="disabled")
             self._window.osc_panel._disconnect_btn.configure(state="normal")

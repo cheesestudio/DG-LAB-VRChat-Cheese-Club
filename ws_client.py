@@ -97,7 +97,6 @@ class WSClient:
 
         try:
             import socket as _sock
-            self._on_status("connected")
             local_ip = _get_local_ip()
             qr_url = (
                 f"https://www.dungeon-lab.com/app-download.php"
@@ -105,14 +104,16 @@ class WSClient:
                 f"#ws://{local_ip}:{self._port}/{self._local_client_id}"
             )
             self._on_qr(qr_url)
-            self._on_message({"type": "info", "text": f"服务器已启动: {local_ip}:{self._port}"})
-            self._on_message({"type": "info", "text": f"终端ID: {self._local_client_id[:16]}.."})
 
             # Create socket with SO_REUSEADDR
             sock = _sock.socket(_sock.AF_INET, _sock.SOCK_STREAM)
             sock.setsockopt(_sock.SOL_SOCKET, _sock.SO_REUSEADDR, 1)
             sock.bind((self._host, self._port))
             sock.listen()
+
+            self._on_status("connected")
+            self._on_message({"type": "info", "text": f"服务器已启动: {local_ip}:{self._port}"})
+            self._on_message({"type": "info", "text": f"终端ID: {self._local_client_id[:16]}.."})
 
             async with websockets.serve(
                 handler, sock=sock,
