@@ -392,6 +392,11 @@ class App:
         self._settings.save()
         state = "开启" if enabled else "关闭"
         self._log_to_console(f"Chatbox显示已{state}", "info")
+        if not enabled and self._osc_client:
+            try:
+                self._osc_client.send_message("/chatbox/input", ["", True, False])
+            except Exception:
+                pass
 
     # --- Settings ---
     def on_settings_change(self):
