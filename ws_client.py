@@ -96,6 +96,7 @@ class WSClient:
             await self._handle_client(ws)
 
         try:
+            import socket as _sock
             self._on_status("connected")
             local_ip = _get_local_ip()
             qr_url = (
@@ -107,8 +108,14 @@ class WSClient:
             self._on_message({"type": "info", "text": f"服务器已启动: {local_ip}:{self._port}"})
             self._on_message({"type": "info", "text": f"终端ID: {self._local_client_id[:16]}.."})
 
+            # Create socket with SO_REUSEADDR
+            sock = _sock.socket(_sock.AF_INET, _sock.SOCK_STREAM)
+            sock.setsockopt(_sock.SOL_SOCKET, _sock.SO_REUSEADDR, 1)
+            sock.bind((self._host, self._port))
+            sock.listen()
+
             async with websockets.serve(
-                handler, self._host, self._port,
+                handler, sock=sock,
                 ping_interval=None,
                 compression=None,
                 server_header=None,

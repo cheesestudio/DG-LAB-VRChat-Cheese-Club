@@ -323,6 +323,32 @@ class SettingsPanel(tk.Frame):
             cb.pack(side="left", padx=(0, 4))
             self._line_checkbuttons.append(cb)
 
+        # Statistics display
+        stats_frame = tk.Frame(self, bg=t.get("bg_panel", "#1a1a2e"))
+        stats_frame.pack(fill="x", padx=8, pady=(8, 2))
+
+        tk.Label(
+            stats_frame, text="📊 电击统计", bg=t.get("bg_panel", "#1a1a2e"),
+            fg=t.get("text_primary", "#e0e0e0"),
+            font=("Microsoft YaHei UI", 9, "bold"), anchor="w",
+        ).pack(anchor="w")
+
+        self._stats_a_label = tk.Label(
+            stats_frame, text="A: 0秒 | 强度×时间: 0",
+            bg=t.get("bg_panel", "#1a1a2e"),
+            fg=t.get("accent_green", "#66bb6a"),
+            font=("Consolas", 9), anchor="w",
+        )
+        self._stats_a_label.pack(anchor="w", pady=1)
+
+        self._stats_b_label = tk.Label(
+            stats_frame, text="B: 0秒 | 强度×时间: 0",
+            bg=t.get("bg_panel", "#1a1a2e"),
+            fg=t.get("accent_orange", "#ffb74d"),
+            font=("Consolas", 9), anchor="w",
+        )
+        self._stats_b_label.pack(anchor="w", pady=1)
+
     def _on_a_limit_change(self, value):
         val = int(float(value))
         self._a_limit_label.configure(text=str(val))
@@ -445,6 +471,10 @@ class SettingsPanel(tk.Frame):
     def update_strength(self, a: int, b: int):
         self._a_label.configure(text=f"A: {a}")
         self._b_label.configure(text=f"B: {b}")
+
+    def update_stats(self, a_sec: int, b_sec: int, a_it: float, b_it: float):
+        self._stats_a_label.configure(text=f"A: {a_sec}秒 | 强度×时间: {a_it:.0f}")
+        self._stats_b_label.configure(text=f"B: {b_sec}秒 | 强度×时间: {b_it:.0f}")
 
     def set_theme_button_text(self, theme_name: str):
         self._theme_btn.configure(text="☀️" if theme_name == "light" else "🌙")

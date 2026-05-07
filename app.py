@@ -30,6 +30,11 @@ class App:
         self._waveform_name_a = ""
         self._waveform_name_b = ""
         self._waveform_feeder_running = False
+        # Statistics: per-channel total seconds and intensity*time
+        self._stats_a_seconds = 0
+        self._stats_b_seconds = 0
+        self._stats_a_intensity_time = 0.0
+        self._stats_b_intensity_time = 0.0
         self._http_server = HttpServer(port=self._settings.get("http_port", 9002))
 
     def run(self):
@@ -155,6 +160,14 @@ class App:
                 f"{'一键开火' if ui_mode == 'instant' else '温柔加力'}",
                 "shock",
             )
+            self._stats_a_seconds += seconds
+            self._stats_b_seconds += seconds
+            self._stats_a_intensity_time += a_intensity * seconds
+            self._stats_b_intensity_time += b_intensity * seconds
+            self._window.after(0, lambda: self._window.settings_panel.update_stats(
+                self._stats_a_seconds, self._stats_b_seconds,
+                self._stats_a_intensity_time, self._stats_b_intensity_time,
+            ))
             self._start_waveform_feeder()
         else:
             self._log_to_console(
@@ -186,7 +199,19 @@ class App:
         )
         self._ws_client.send_waveform("A", a_wave, duration=chunk_sec)
         self._ws_client.send_waveform("B", b_wave, duration=chunk_sec)
+        self._window.after(0, lambda: self._window.settings_panel.update_stats(
+            self._stats_a_seconds, self._stats_b_seconds,
+            self._stats_a_intensity_time, self._stats_b_intensity_time,
+        ))
         self._window.after(1000, self._waveform_feeder)
+
+    def get_stats(self) -> dict:
+        return {
+            "a_seconds": self._stats_a_seconds,
+            "b_seconds": self._stats_b_seconds,
+            "a_intensity_time": self._stats_a_intensity_time,
+            "b_intensity_time": self._stats_b_intensity_time,
+        }
 
     def _on_log_line(self, line: str):
         if "[DGLABCheeseShocking]" in line:
@@ -324,8 +349,19 @@ class App:
             self._avatar_manager._running = True
             self._avatar_manager._start_bg_tasks()
 
+            import socket as _sock
+
             class ReusableOSCUDPServer(osc_server.ThreadingOSCUDPServer):
                 allow_reuse_address = True
+                allow_reuse_port = True
+
+                def server_bind(self):
+                    self.socket.setsockopt(_sock.SOL_SOCKET, _sock.SO_REUSEADDR, 1)
+                    try:
+                        self.socket.setsockopt(_sock.SOL_SOCKET, _sock.SO_REUSEPORT, 1)
+                    except (AttributeError, OSError):
+                        pass
+                    super().server_bind()
 
             self._osc_server = ReusableOSCUDPServer(
                 ("127.0.0.1", avatar_port), d
@@ -540,6 +576,18 @@ class App:
             self._ws_client.send_waveform("B", b_wave, duration=seconds)
 
         self._ws_client.force_strength(a_limit, b_limit)
+        # Track stats
+        if mode == 0:
+            self._stats_a_seconds += seconds
+            self._stats_a_intensity_time += a_intensity * seconds
+        elif mode == 1:
+            self._stats_b_seconds += seconds
+            self._stats_b_intensity_time += b_intensity * seconds
+        else:
+            self._stats_a_seconds += seconds
+            self._stats_b_seconds += seconds
+            self._stats_a_intensity_time += a_intensity * seconds
+            self._stats_b_intensity_time += b_intensity * seconds
         self._log_to_console(
             f"HTTP电击: {seconds}秒 | mode={mode} | "
             f"A:{a_intensity} B:{b_intensity} | "
