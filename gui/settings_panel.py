@@ -219,7 +219,7 @@ class SettingsPanel(tk.Frame):
             font=("Microsoft YaHei UI", 9),
         ).pack(anchor="w")
 
-        self._custom_var = tk.StringVar(value="")
+        self._custom_var = tk.StringVar(value="我是Saob")
         self._custom_entry = tk.Entry(
             custom_frame, textvariable=self._custom_var,
             bg=t.get("bg_input", "#0d1117"),
@@ -233,6 +233,42 @@ class SettingsPanel(tk.Frame):
         self._custom_entry.pack(fill="x", pady=(2, 0))
         self._custom_entry.bind("<FocusOut>", lambda e: self._on_change())
         self._custom_entry.bind("<Return>", lambda e: self._on_change())
+
+        # Chatbox line toggles
+        toggle_frame = tk.Frame(self, bg=t.get("bg_panel", "#1a1a2e"))
+        toggle_frame.pack(fill="x", padx=8, pady=(6, 2))
+
+        tk.Label(
+            toggle_frame, text="Chatbox显示行:", bg=t.get("bg_panel", "#1a1a2e"),
+            fg=t.get("text_secondary", "#b0b0b0"),
+            font=("Microsoft YaHei UI", 9),
+        ).pack(anchor="w")
+
+        self._cb_line1_var = tk.BooleanVar(value=True)
+        self._cb_line2_var = tk.BooleanVar(value=True)
+        self._cb_line3_var = tk.BooleanVar(value=True)
+        self._cb_line4_var = tk.BooleanVar(value=True)
+        self._cb_line5_var = tk.BooleanVar(value=True)
+
+        toggles = [
+            (self._cb_line1_var, "标题行"),
+            (self._cb_line2_var, "强度行"),
+            (self._cb_line3_var, "剩余秒数"),
+            (self._cb_line4_var, "波形名"),
+            (self._cb_line5_var, "自定义"),
+        ]
+        for var, text in toggles:
+            cb = tk.Checkbutton(
+                toggle_frame, text=text, variable=var,
+                bg=t.get("bg_panel", "#1a1a2e"),
+                fg=t.get("text_secondary", "#b0b0b0"),
+                selectcolor=t.get("bg_button", "#0f3460"),
+                activebackground=t.get("bg_panel", "#1a1a2e"),
+                activeforeground=t.get("text_secondary", "#b0b0b0"),
+                font=("Microsoft YaHei UI", 8),
+                command=self._on_change,
+            )
+            cb.pack(side="left", padx=(0, 4))
 
     def _on_a_limit_change(self, value):
         val = int(float(value))
@@ -290,6 +326,22 @@ class SettingsPanel(tk.Frame):
 
     def set_custom_chatbox(self, text: str):
         self._custom_var.set(text)
+
+    def get_chatbox_toggles(self) -> dict:
+        return {
+            "line1": self._cb_line1_var.get(),
+            "line2": self._cb_line2_var.get(),
+            "line3": self._cb_line3_var.get(),
+            "line4": self._cb_line4_var.get(),
+            "line5": self._cb_line5_var.get(),
+        }
+
+    def set_chatbox_toggles(self, t: dict):
+        self._cb_line1_var.set(t.get("line1", True))
+        self._cb_line2_var.set(t.get("line2", True))
+        self._cb_line3_var.set(t.get("line3", True))
+        self._cb_line4_var.set(t.get("line4", True))
+        self._cb_line5_var.set(t.get("line5", True))
 
     def update_strength(self, a: int, b: int):
         self._a_label.configure(text=f"A: {a}")

@@ -369,14 +369,17 @@ class WSClient:
     def send_waveform(self, channel: str, hex_data, duration: int = 5):
         if not self.is_paired:
             return
-        if isinstance(hex_data, list):
-            wavestr = json.dumps(hex_data, separators=(",", ":"))
-        else:
-            wavestr = str(hex_data)
+        if not isinstance(hex_data, list) or not hex_data:
+            return
+        # pydglab_ws limit: max 86 entries per message, max 1950 chars
+        CHUNK_SIZE = 86
         if self._loop and self._loop.is_running():
-            asyncio.run_coroutine_threadsafe(
-                self._send_to_app("msg", f"pulse-{channel}:{wavestr}"), self._loop
-            )
+            for i in range(0, len(hex_data), CHUNK_SIZE):
+                chunk = hex_data[i:i + CHUNK_SIZE]
+                wavestr = json.dumps(chunk, separators=(",", ":"))
+                asyncio.run_coroutine_threadsafe(
+                    self._send_to_app("msg", f"pulse-{channel}:{wavestr}"), self._loop
+                )
 
     def clear_waveform(self, channel: str):
         if not self.is_paired:

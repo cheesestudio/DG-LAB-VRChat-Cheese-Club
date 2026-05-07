@@ -26,6 +26,8 @@ class App:
         self._shock_remaining_b = 0
         self._shock_end_time = 0
         self._shock_recent_events = []  # [(timestamp, seconds), ...] for 1s window safety
+        self._waveform_name_a = ""
+        self._waveform_name_b = ""
 
     def run(self):
         theme = get_theme(self._current_theme_name)
@@ -109,6 +111,8 @@ class App:
         a_wave, b_wave, a_name, b_name = generate_ab_waveforms(
             seconds, a_intensity, b_intensity, ui_mode, wf_mode, alternate=True,
         )
+        self._waveform_name_a = a_name
+        self._waveform_name_b = b_name
 
         a_display = waveform_to_display_data(a_wave)
         b_display = waveform_to_display_data(b_wave)
@@ -119,17 +123,17 @@ class App:
         if self._ws_client and self._ws_client.is_paired:
             self._ws_client.clear_waveform("A")
             self._ws_client.clear_waveform("B")
-            self._ws_client.send_waveform("A", a_wave, duration=seconds)
-            self._ws_client.send_waveform("B", b_wave, duration=seconds)
-            # Force strength immediately after sending waveform
+            # Set strength before waveform
             self._ws_client.force_strength(a_limit, b_limit)
+            import time as _t
+            _t.sleep(0.3)
+            self._ws_client.send_waveform("A", a_wave, duration=seconds)
+            _t.sleep(0.1)
+            self._ws_client.send_waveform("B", b_wave, duration=seconds)
             self._log_to_console(
                 f"电击: {seconds}秒 | A:{a_intensity}({a_name}) B:{b_intensity}({b_name}) | "
                 f"{'一键开火' if ui_mode == 'instant' else '温柔加力'}",
                 "shock",
-            )
-            self._send_chatbox(
-                f"[芝士郊狼台球后援会]\n电击 {seconds}秒 | A:{a_intensity} B:{b_intensity}\n{a_name}/{b_name}"
             )
         else:
             self._log_to_console(
@@ -322,17 +326,33 @@ class App:
             a_cur = self._ws_client._strength.get("A", 0)
             b_cur = self._ws_client._strength.get("B", 0)
             custom_line = self._window.settings_panel.get_custom_chatbox()
+            toggles = self._window.settings_panel.get_chatbox_toggles()
             # Calculate remaining shock time
             now = _time.time()
             remaining = max(0, int(self._shock_end_time - now))
-            lines = [
-                "[芝士郊狼台球后援会]",
-                f"A: {a_cur} | B: {b_cur}",
-            ]
-            if remaining > 0:
+            lines = []
+            # Line 1: Title
+            if toggles.get("line1", True):
+                lines.append("[芝士郊狼台球后援会]")
+            # Line 2: Strength
+            if toggles.get("line2", True):
+                lines.append(f"A: {a_cur} | B: {b_cur}")
+            # Line 3: Remaining time (only when active)
+            if toggles.get("line3", True) and remaining > 0:
                 lines.append(f"剩余电击: {remaining}秒")
-            if custom_line:
+            # Line 4: Waveform names
+            if toggles.get("line4", True):
+                name_parts = []
+                if self._waveform_name_a:
+                    name_parts.append(f"A:{self._waveform_name_a}")
+                if self._waveform_name_b:
+                    name_parts.append(f"B:{self._waveform_name_b}")
+                if name_parts:
+                    lines.append(" ".join(name_parts))
+            # Line 5: Custom
+            if toggles.get("line5", True) and custom_line:
                 lines.append(custom_line)
+            # Footer: QQ + version (always show)
             lines.append("QQ:757992539 | v1.0")
             self._send_chatbox("\n".join(lines))
         if self._chatbox_running:
@@ -398,6 +418,7 @@ class App:
         self._window.osc_panel.set_mode_b(s.get("avatar_channel_b_mode", "distance"))
         self._window.osc_panel.set_chatbox_enabled(s.get("chatbox_enabled", True))
         self._window.settings_panel.set_custom_chatbox(s.get("custom_chatbox", ""))
+        self._window.settings_panel.set_chatbox_toggles(s.get("chatbox_toggles", {}))
         self._window.settings_panel.set_theme_button_text(self._current_theme_name)
 
     def _save_settings_from_ui(self):
@@ -414,6 +435,7 @@ class App:
         s.set("avatar_channel_b_mode", self._window.osc_panel.get_mode_b())
         s.set("chatbox_enabled", self._window.osc_panel.get_chatbox_enabled())
         s.set("custom_chatbox", self._window.settings_panel.get_custom_chatbox())
+        s.set("chatbox_toggles", self._window.settings_panel.get_chatbox_toggles())
         s.set("seconds_mapping", self._window.mapping_panel.get_mapping())
         s.save()
 
