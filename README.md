@@ -275,6 +275,8 @@ build.bat
 
 当同时使用 VRCFaceTracking 等面捕软件时，VRCFaceTracking 可能会失效或 Chatbox 不显示。原因是两个软件同时向 VRChat 的 9000 端口发送 OSC 数据，但 VRChat 只允许单连接。
 
+把面捕的监听端口随便改一下就行了(面捕只需要发送就能正常用),如果你真的需要用到这个功能看下面
+
 **解决方案：使用 osc-repeater 分离 Chatbox**
 
 1. 下载 [osc-repeater](https://github.com/CyCoreSystems/osc-repeater)
