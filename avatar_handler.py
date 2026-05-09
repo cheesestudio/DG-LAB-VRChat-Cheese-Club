@@ -16,14 +16,16 @@ logger = logging.getLogger(__name__)
 def generate_wave_100ms(freq: int, from_: float, to_: float) -> str:
     """Generate a 100ms waveform hex string.
     Compatible with Shocking-VRChat's generate_wave_100ms.
-    Each entry: 4 freq bytes + 4 intensity bytes = 8 bytes = 16 hex chars.
+    Each entry: 4 freq bytes + 4 interpolated intensity bytes = 8 bytes = 8 hex chars.
+    Output format: ["0A0A0A0A64646464"] — array with single 8-char hex string.
     """
     from_ = int(100 * from_)
     to_ = int(100 * to_)
     ret = [f"{freq:02X}"] * 4
     delta = (to_ - from_) // 4
     ret += [f"{min(max(from_ + delta * i, 0), 100):02X}" for i in range(1, 5)]
-    return json.dumps(["".join(ret)], separators=(",", ":"))
+    wave_hex = "".join(ret)
+    return json.dumps([wave_hex], separators=(",", ":"))
 
 
 # === Mode Handlers ===
