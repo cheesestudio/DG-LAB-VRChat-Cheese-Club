@@ -4,7 +4,7 @@ from settings import Settings
 from themes import get_theme
 from log_monitor import LogMonitor
 from ws_client import WSClient
-from waveform import generate_ab_waveforms, waveform_to_display_data
+from waveform import generate_ab_waveforms
 from avatar_handler import AvatarManager
 from gui.main_window import MainWindow
 from http_server import HttpServer
@@ -161,13 +161,6 @@ class App:
         self._waveform_name_a = a_name
         self._waveform_name_b = b_name
 
-        a_display = waveform_to_display_data(a_wave)
-        b_display = waveform_to_display_data(b_wave)
-        panel = self._window.waveform_panel
-        self._window.after(0, lambda ad=a_display, bd=b_display, s=seconds, ai=a_intensity, bi=b_intensity, m=ui_mode, an=a_name, bn=b_name, pan=panel: pan.update_waveform(
-            ad, bd, s, ai, bi, m, an, bn,
-        ))
-
         if self._ws_client and self._ws_client.is_paired:
             # Only clear if no shock is currently playing
             if now >= self._shock_end_time:
@@ -301,11 +294,27 @@ class App:
         if self._ws_client:
             self._ws_client.disconnect()
             self._ws_client = None
+        self._stop_waveform_monitor()
         self._log_to_console("服务已停止", "warning")
+
+    def _start_waveform_monitor(self):
+        if self._ws_client:
+            self._window.waveform_panel.start(
+                get_a_value=lambda: self._ws_client._strength.get("A", 0) if self._ws_client else 0,
+                get_b_value=lambda: self._ws_client._strength.get("B", 0) if self._ws_client else 0,
+            )
+
+    def _stop_waveform_monitor(self):
+        if self._window:
+            self._window.waveform_panel.stop()
 
     def _on_ws_status(self, status: str):
         if self._window:
             self._window.after(0, lambda: self._window.connection_panel.set_status(status))
+            if status == "paired":
+                self._window.after(0, self._start_waveform_monitor)
+            elif status in ("connected", "disconnected"):
+                self._window.after(0, self._stop_waveform_monitor)
 
     def _on_qr_url(self, url: str):
         if self._window:
