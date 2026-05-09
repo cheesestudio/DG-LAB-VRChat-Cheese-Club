@@ -158,8 +158,8 @@ class WaveformPanel(tk.Frame):
         self._playhead = elapsed_ms
         self._render_frame()
 
-        # ~60 FPS for smoother animation
-        self._anim_id = self.after(60, self._tick)
+        # ~15 FPS - enough for waveform visualization, avoids blocking UI
+        self._anim_id = self.after(100, self._tick)
 
     def _render_frame(self):
         """Render the current visible window with scrolling-left effect."""
@@ -235,7 +235,7 @@ class WaveformPanel(tk.Frame):
         if all_y:
             self._ax.set_ylim(0, max(max(all_y) * 1.2, 10))
 
-        self._canvas.draw_idle()
+        self._canvas.draw()
 
     def _mode_text(self):
         return "一键开火" if self._mode == "instant" else "温柔加力"

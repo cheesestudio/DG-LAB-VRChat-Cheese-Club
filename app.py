@@ -200,33 +200,41 @@ class App:
     def _start_waveform_feeder(self):
         if not self._waveform_feeder_running:
             self._waveform_feeder_running = True
-            self._waveform_feeder()
+            # Read UI values on main thread, then run feeder in background
+            self._feeder_ui_mode = self._window.settings_panel.get_mode()
+            self._feeder_wf_mode = self._window.settings_panel.get_waveform_mode()
+            self._feeder_a_limit = self._window.settings_panel.get_a_limit()
+            self._feeder_b_limit = self._window.settings_panel.get_b_limit()
+            self._feeder_custom_wf = (
+                self._window.settings_panel.get_custom_waveform()
+                if self._feeder_wf_mode == "custom" else ""
+            )
+            threading.Thread(target=self._waveform_feeder_thread, daemon=True).start()
 
-    def _waveform_feeder(self):
+    def _waveform_feeder_thread(self):
         import time as _time
-        now = _time.time()
-        remaining = self._shock_end_time - now
-        if remaining <= 0 or not self._ws_client or not self._ws_client.is_paired:
-            self._waveform_feeder_running = False
-            return
-        chunk_sec = max(1, int(remaining))  # Send in 1-second chunks, minimum 1
-        chunk_sec = min(chunk_sec, 1)         # Cap at 1 second per chunk
-        ui_mode = self._window.settings_panel.get_mode()
-        wf_mode = self._window.settings_panel.get_waveform_mode()
-        a_limit = self._window.settings_panel.get_a_limit()
-        b_limit = self._window.settings_panel.get_b_limit()
-        custom_wf = self._window.settings_panel.get_custom_waveform() if wf_mode == "custom" else ""
-        a_wave, b_wave, _, _ = generate_ab_waveforms(
-            chunk_sec, a_limit, b_limit, ui_mode, wf_mode, alternate=True,
-            custom_waveform=custom_wf,
-        )
-        self._ws_client.send_waveform("A", a_wave, duration=chunk_sec)
-        self._ws_client.send_waveform("B", b_wave, duration=chunk_sec)
-        panel = self._window.settings_panel
-        stats = (self._stats_a_seconds, self._stats_b_seconds,
-                 self._stats_a_intensity_time, self._stats_b_intensity_time)
-        self._window.after(0, lambda p=panel, s=stats: p.update_stats(*s))
-        self._window.after(1000, self._waveform_feeder)
+        while self._waveform_feeder_running:
+            now = _time.time()
+            remaining = self._shock_end_time - now
+            if remaining <= 0 or not self._ws_client or not self._ws_client.is_paired:
+                self._waveform_feeder_running = False
+                break
+            chunk_sec = 1
+            a_wave, b_wave, _, _ = generate_ab_waveforms(
+                chunk_sec, self._feeder_a_limit, self._feeder_b_limit,
+                self._feeder_ui_mode, self._feeder_wf_mode, alternate=True,
+                custom_waveform=self._feeder_custom_wf,
+            )
+            self._ws_client.send_waveform("A", a_wave, duration=chunk_sec)
+            self._ws_client.send_waveform("B", b_wave, duration=chunk_sec)
+            # Update stats on main thread
+            stats = (self._stats_a_seconds, self._stats_b_seconds,
+                     self._stats_a_intensity_time, self._stats_b_intensity_time)
+            try:
+                self._window.after(0, lambda s=stats: self._window.settings_panel.update_stats(*s))
+            except Exception:
+                pass
+            _time.sleep(0.8)
 
     def get_stats(self) -> dict:
         return {
