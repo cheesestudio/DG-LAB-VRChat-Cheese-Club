@@ -168,9 +168,7 @@ class WaveformPanel(tk.Frame):
         self._cursor.set_xdata([self._visible_seconds])
 
         self._ax.set_xlim(0, self._visible_seconds)
-        all_y = ys_a + ys_b
-        if all_y:
-            self._ax.set_ylim(0, max(max(all_y) * 1.2, 10))
+        self._ax.set_ylim(0, 200)
 
         self._canvas.draw()
 
