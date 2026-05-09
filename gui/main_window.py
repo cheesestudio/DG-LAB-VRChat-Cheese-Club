@@ -142,7 +142,11 @@ class MainWindow:
         self.console_panel.apply_theme(t)
 
     def run(self):
-        self._root.protocol("WM_DELETE_WINDOW", self._app.on_close)
+        def _on_close():
+            self._app.on_close()
+            import os
+            os._exit(0)
+        self._root.protocol("WM_DELETE_WINDOW", _on_close)
         self._root.mainloop()
 
     def destroy(self):

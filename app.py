@@ -718,7 +718,10 @@ class App:
             if self._window:
                 root = self._window._root
                 self._window = None
-                root.after(50, root.destroy)
+                try:
+                    root.destroy()
+                except Exception:
+                    pass
                 log.info("window destroyed")
         except Exception as e:
             log.error(f"on_close error: {e}")

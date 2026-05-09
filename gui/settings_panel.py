@@ -289,8 +289,12 @@ class SettingsPanel(tk.Frame):
         self._cb_line4_var = tk.BooleanVar(value=True)
         self._cb_line5_var = tk.BooleanVar(value=True)
 
+        # Row 1: 全部 + 标题行 + 强度行 + 剩余秒数
+        row1 = tk.Frame(toggle_frame, bg=t.get("bg_panel", "#1a1a2e"))
+        row1.pack(fill="x")
+
         self._cb_all = tk.Checkbutton(
-            toggle_frame, text="全部", variable=self._cb_all_var,
+            row1, text="全部", variable=self._cb_all_var,
             bg=t.get("bg_panel", "#1a1a2e"),
             fg=t.get("accent_cyan", "#39d2c0"),
             selectcolor=t.get("bg_button", "#0f3460"),
@@ -302,16 +306,36 @@ class SettingsPanel(tk.Frame):
         self._cb_all.pack(side="left", padx=(0, 6))
 
         self._line_checkbuttons = []
-        toggles = [
+        toggles_row1 = [
             (self._cb_line1_var, "标题行"),
             (self._cb_line2_var, "强度行"),
             (self._cb_line3_var, "剩余秒数"),
+        ]
+        for var, text in toggles_row1:
+            cb = tk.Checkbutton(
+                row1, text=text, variable=var,
+                bg=t.get("bg_panel", "#1a1a2e"),
+                fg=t.get("text_secondary", "#b0b0b0"),
+                selectcolor=t.get("bg_button", "#0f3460"),
+                activebackground=t.get("bg_panel", "#1a1a2e"),
+                activeforeground=t.get("text_secondary", "#b0b0b0"),
+                font=("Microsoft YaHei UI", 8),
+                command=self._on_change,
+            )
+            cb.pack(side="left", padx=(0, 4))
+            self._line_checkbuttons.append(cb)
+
+        # Row 2: 波形名 + 自定义
+        row2 = tk.Frame(toggle_frame, bg=t.get("bg_panel", "#1a1a2e"))
+        row2.pack(fill="x")
+
+        toggles_row2 = [
             (self._cb_line4_var, "波形名"),
             (self._cb_line5_var, "自定义"),
         ]
-        for var, text in toggles:
+        for var, text in toggles_row2:
             cb = tk.Checkbutton(
-                toggle_frame, text=text, variable=var,
+                row2, text=text, variable=var,
                 bg=t.get("bg_panel", "#1a1a2e"),
                 fg=t.get("text_secondary", "#b0b0b0"),
                 selectcolor=t.get("bg_button", "#0f3460"),
