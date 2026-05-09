@@ -110,7 +110,15 @@ class WaveformPanel(tk.Frame):
             except Exception:
                 a_val, b_val = 0, 0
             now = time.time()
-            self._history.append((now, a_val, b_val))
+            # Only record when there's actual strength
+            if a_val > 0 or b_val > 0:
+                self._history.append((now, a_val, b_val))
+            elif self._history:
+                # Once idle, stop adding points but keep last known state
+                last_ts, last_a, last_b = self._history[-1]
+                if last_a > 0 or last_b > 0:
+                    # Transition to idle: add one zero point to show the drop
+                    self._history.append((now, 0, 0))
             self._render()
             self._update_info(a_val, b_val)
 
