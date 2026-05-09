@@ -1,6 +1,6 @@
 # 芝士郊狼控制软件
 
-VRChat + DG-LAB 设备联动控制工具，属于**芝士郊狼台球后援会**（[VRC群组](https://vrc.group/CHEESE.2410)，QQ群: 757992539）。
+VRChat + DG-LAB 设备联动控制工具，属于**芝士郊狼台球后援会**（[VRC群组链接 CHEESE.2410](https://vrc.group/CHEESE.2410)，QQ群: 757992539）。
 
 ---
 
@@ -100,12 +100,12 @@ VRChat + DG-LAB 设备联动控制工具，属于**芝士郊狼台球后援会**
 
 以下以 **Avatar 3.0（AV3）+ 触摸触发器（Touch Sender）** 为例，说明如何让你的 Avatar 向本软件发送 OSC 参数。
 
-> 提示：以下步骤需要你拥有 Avatar 的 Udon 程序编辑权限（需要 Avatar 源代码或使用 SDK 内置的触摸触发器）。不同 Avatar 作者提供的触发方式可能不同，通用步骤是：**在 Avatar 上配置 OSC 参数的发送地址和类型，值通常为 float 0~1**。
+> 提示：以下步骤需要你会改模，通用步骤是：**在 Avatar 上配置 OSC 参数的发送地址和类型，值通常为 float 0~1**。
 
 #### 步骤 1：在 Avatar 上找到或创建 OSC 参数
 
-1. 将 Avatar 上传到 VRChat（必须是**已发布**状态才能保存 OSC 配置）
-2. 进入 VRChat，装备该 Avatar
+1. 将 Avatar 上传到 VRChat
+2. 进入 VRChat，使用该 Avatar(屁话)
 3. 打开 `Action Menu → Osc`（需要先开启 OSC）
 4. 点击「Debug」进入 OSC 调试界面，可看到所有可用的参数
 
