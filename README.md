@@ -2,6 +2,8 @@
 
 VRChat + DG-LAB 设备联动控制工具，属于**芝士郊狼台球后援会**（QQ群: 757992539）。
 
+---
+
 ## 功能一览
 
 | 功能 | 说明 |
@@ -9,10 +11,6 @@ VRChat + DG-LAB 设备联动控制工具，属于**芝士郊狼台球后援会**
 | DG-LAB 设备配对 | 扫码连接 DG-LAB APP，双通道独立控制 |
 | VRChat 日志监控 | 自动检测电击事件并触发设备 |
 | Avatar OSC 接收 | 距离/电击/触碰三种模式，实时响应 VRChat Avatar 参数 |
-| VRChat Avatar OSC 参数模式说明 | |
-| `distance` | **连续模式**，OSC 值持续映射为电刺激强度，强度与参数值成比例，连续发送波形 |
-| `shock` | **阈值触发模式**，OSC 值超过设定阈值时触发一次电击（持续指定时长） |
-| `touch` | **导数模式**，根据触摸速度/加速度的导数（速率变化）生成电刺激波形，动态响应触摸激烈程度 |
 | Chatbox 状态显示 | 头顶显示强度、剩余时间、波形名等，每行可独立开关 |
 | 波形预览 | 实时动画播放，滑动窗口展示波形数据 |
 | 时长累计 | 连续触发时电击时长自动叠加 |
@@ -22,13 +20,17 @@ VRChat + DG-LAB 设备联动控制工具，属于**芝士郊狼台球后援会**
 | 暗黑/明亮主题 | 一键切换 UI 主题 |
 | 设置持久化 | 所有配置自动保存到本地 |
 
+---
+
 ## 截图
 
 ![界面预览](screenshot.png)
 
-## 使用方法
+---
 
-### 1. 下载
+## 快速开始
+
+### 1. 下载运行
 
 从 [Releases](https://github.com/cheesestudio/DG-LAB-VRChat-Cheese-Club/releases) 下载 `芝士郊狼控制软件.exe`，双击运行即可，无需安装。
 
@@ -40,11 +42,113 @@ VRChat + DG-LAB 设备联动控制工具，属于**芝士郊狼台球后援会**
 
 ### 3. 连接 VRChat
 
-1. 启动 VRChat（软件会自动监控日志）
-2. 软件自动启动 OSC 服务（Chatbox 端口 9000，Avatar 端口 9001）
-3. 进入 VRChat 后，电击事件会自动触发设备
+1. 在 VRChat 中开启 OSC：`Action Menu → Osc → Enabled`
+2. 软件自动启动 OSC 服务（Chatbox 端口 `9000`，Avatar 端口 `9001`）
+3. 进入 VRChat 后，Avatar 参数变化会实时触发设备
 
-### 4. Chatbox 自定义
+### 4. 测试设备
+
+点击「测试电击 (3秒双通道满)」按钮，验证设备是否正常工作。
+
+---
+
+## Avatar 参数说明
+
+### 监听的 OSC 地址
+
+软件在 `9001` 端口监听 VRChat 发来的 Avatar 参数，每条消息根据配置的地址匹配到对应通道和模式。
+
+#### 通道 A 默认监听地址
+
+| 地址 | 说明 |
+|------|------|
+| `/avatar/parameters/pcs/contact/enterPass` | 进入传送门时触发（bool） |
+| `/avatar/parameters/Shock/TouchAreaA` | 触摸区域 A（float 0-1） |
+| `/avatar/parameters/Shock/TouchAreaC` | 触摸区域 C（float 0-1） |
+| `/avatar/parameters/Shock/wildcard/*` | 所有 Shock 开头的参数（通配符） |
+
+#### 通道 B 默认监听地址
+
+| 地址 | 说明 |
+|------|------|
+| `/avatar/parameters/pcs/contact/enterPass` | 进入传送门时触发（bool） |
+| `/avatar/parameters/Shock/TouchAreaB` | 触摸区域 B（float 0-1） |
+| `/avatar/parameters/Shock/TouchAreaC` | 触摸区域 C（float 0-1） |
+| `/avatar/parameters/lms-penis-proximityA*` | 距离感应参数 A（通配符） |
+
+### 参数模式说明
+
+| 模式 | 行为 |
+|------|------|
+| `distance`（距离/连续） | OSC 值持续映射为电刺激强度，强度与参数值成比例，连续发送波形 |
+| `shock`（电击） | OSC 值超过设定阈值时触发一次电击（持续指定时长） |
+| `touch`（触感/导数） | 根据触摸速度/加速度的导数（速率变化）生成电刺激波形，动态响应触摸激烈程度 |
+
+### 给 Avatar 添加触发器（Avatar 3.0 / AV3）
+
+以下以 **Avatar 3.0（AV3）+ 触摸触发器（Touch Sender）** 为例，说明如何让你的 Avatar 向本软件发送 OSC 参数。
+
+> 提示：以下步骤需要你拥有 Avatar 的 Udon 程序编辑权限（需要 Avatar 源代码或使用 SDK 内置的触摸触发器）。不同 Avatar 作者提供的触发方式可能不同，通用步骤是：**在 Avatar 上配置 OSC 参数的发送地址和类型，值通常为 float 0~1**。
+
+#### 步骤 1：在 Avatar 上找到或创建 OSC 参数
+
+1. 将 Avatar 上传到 VRChat（必须是**已发布**状态才能保存 OSC 配置）
+2. 进入 VRChat，装备该 Avatar
+3. 打开 `Action Menu → Osc`（需要先开启 OSC）
+4. 点击「Debug」进入 OSC 调试界面，可看到所有可用的参数
+
+#### 步骤 2：编辑 OSC 配置文件
+
+OSC 配置保存在本地文件中，路径类似：
+
+```
+C:\Users\<你的用户名>\AppData\LocalLow\VRChat\VRChat\OSC\<你的用户ID>\Avatars\<AvatarID>.json
+```
+
+**方法 A：手动编辑配置**
+
+1. 打开上述 JSON 文件
+2. 找到你要触发的参数，在 `input` 中添加地址和类型：
+
+```json
+{
+  "name": "Shock",
+  "input": {
+    "address": "/avatar/parameters/Shock/TouchAreaA",
+    "type": "Float"
+  }
+}
+```
+
+3. 保存文件，重新进入游戏使配置生效
+
+**方法 B：通过触摸触发器（推荐）**
+
+1. 使用支持 AV3 的 Avatar（如内置了触摸触发器的 Avatar）
+2. 在 Avatar 的触摸区域挂载 `OSC Touch Sender` 组件（VRChat SDK 内置）
+3. 设置发送地址为 `/avatar/parameters/Shock/TouchAreaA`
+4. 设置类型为 `Float`
+5. 当玩家触摸该区域时，Avatar 自动发送 OSC 值（0~1）到本软件
+
+#### 步骤 3：验证参数是否被接收
+
+1. 启动本软件，点击「连接」按钮
+2. 在 VRChat 中触发该参数（如触摸 Avatar 区域）
+3. 查看软件右侧「接收参数」面板，应该能看到类似：
+   ```
+   /avatar/parameters/Shock/TouchAreaA: 0.75
+   ```
+4. 如果有反应但设备没触发，检查通道 A 的模式是否为 `distance`/`shock`/`touch` 中的合适模式
+
+#### 常见问题
+
+- **参数收不到**：确认 OSC 已开启（`Action Menu → Osc → Enabled`），确认软件和 VRChat 在同一台电脑上，确认端口 9001 没有被占用
+- **设备不响应**：检查软件是否已连接 DG-LAB APP（看连接面板状态），检查通道模式是否正确
+- **通配符不生效**：部分通配符格式可能不被 python-osc 完整支持，优先使用精确地址
+
+---
+
+## Chatbox 自定义
 
 在第二列「Chatbox自定义」输入框中编辑显示内容，每行可通过复选框独立开关：
 
@@ -57,9 +161,21 @@ A:挑逗2 B:信号灯            ← 波形名
 QQ:757992539 | v1.1        ← 固定显示
 ```
 
-### 5. 测试设备
+---
 
-点击「测试电击 (3秒双通道满)」按钮，验证设备是否正常工作。
+## HTTP API（供 VRChat Udon 调用）
+
+软件在端口 `8800` 提供了 HTTP 接口，可被 VRChat 中的 Udon 程序调用：
+
+| 接口 | 说明 | 示例 |
+|------|------|------|
+| `GET /api/v1/status` | 查询设备连接状态 | `http://localhost:8800/api/v1/status` |
+| `GET /api/v1/shock/A/<秒数>` | 触发通道 A 电击 | `http://localhost:8800/api/v1/shock/A/5` |
+| `GET /api/v1/shock/B/<秒数>` | 触发通道 B 电击 | `http://localhost:8800/api/v1/shock/B/3` |
+| `GET /api/v1/shock/all/<秒数>` | 触发双通道电击 | `http://localhost:8800/api/v1/shock/all/10` |
+| `GET /api/v1/sendwave/<通道>/<重复>/<波形数据>` | 发送自定义波形 | `http://localhost:8800/api/v1/sendwave/A/10/0A0A0A0A64646464` |
+
+> Udon 中使用 `UnityEngine.WWW` 或 `VRCWebProxy` 发送 HTTP 请求即可触发电击。
 
 ---
 
@@ -75,6 +191,7 @@ QQ:757992539 | v1.1        ← 固定显示
 ├── waveform.py          # 波形生成
 ├── waveform_library.py  # 预设波形库
 ├── log_monitor.py       # VRChat 日志监控
+├── http_server.py       # HTTP 服务器（ShockingManager 兼容）
 ├── settings.py          # 设置管理
 ├── themes.py            # 主题配置
 ├── gui/                 # GUI 面板
@@ -115,7 +232,8 @@ build.bat
 ### 协议与参考
 
 - [DG-LAB SOCKET v2 协议](https://github.com/DGLab-Project/DG-LAB-SOCKET-v2) — 与 DG-LAB 官方 APP 兼容
-- [Shocking-VRChat](https://github.com/VRChatNext/Shocking-VRChat) — HTTP 接口参考（状态检测、电击触发）
+- [Shocking-VRChat](https://github.com/VRChatNext/Shocking-VRChat) — HTTP 接口参考
+- [VRChat OSC 文档](https://docs.vrchat.com/docs/osc-overview) — 官方 OSC 说明
 - Udon 脚本参考：Ero小玉 / Cheese
 
 ### 许可
