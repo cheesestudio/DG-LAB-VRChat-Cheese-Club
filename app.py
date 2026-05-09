@@ -22,6 +22,7 @@ class App:
         self._osc_server = None
         self._osc_client = None
         self._chatbox_running = False
+        self._closing = False
         self._current_theme_name = self._settings.get("theme", "dark")
         self._shock_remaining_a = 0
         self._shock_remaining_b = 0
@@ -437,7 +438,7 @@ class App:
 
     def _send_chatbox_status(self):
         import time as _time
-        if not self._chatbox_running:
+        if self._closing or not self._chatbox_running:
             return
         if not self._window.settings_panel.get_chatbox_enabled():
             self._window.after(1000, self._send_chatbox_status)
@@ -673,6 +674,7 @@ class App:
         log = logging.getLogger(__name__)
         try:
             log.info("on_close start")
+            self._closing = True
             self._chatbox_running = False
             if self._http_server:
                 self._http_server.stop()

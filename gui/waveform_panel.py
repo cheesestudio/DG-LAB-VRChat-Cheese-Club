@@ -1,23 +1,25 @@
 import tkinter as tk
 import collections
 import time
+import math
 from matplotlib.figure import Figure
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 
 
 class WaveformPanel(tk.Frame):
-    """Continuous scrolling waveform display showing A/B strength over time."""
+    """Continuous scrolling waveform display showing oscillating wave patterns."""
 
     def __init__(self, master, theme: dict = None, **kwargs):
         self._theme = theme or {}
         super().__init__(master, bg=self._theme.get("bg_panel", "#1a1a2e"), **kwargs)
 
-        # History buffer: (timestamp, a_value, b_value)
+        # History buffer: (timestamp, a_amplitude, b_amplitude)
         self._history = collections.deque(maxlen=120)  # 60 seconds at 0.5s interval
-        self._visible_seconds = 30  # show last 30 seconds
+        self._visible_seconds = 30
         self._tick_id = None
-        self._get_a_value = None  # callback -> int
-        self._get_b_value = None  # callback -> int
+        self._get_a_value = None
+        self._get_b_value = None
+        self._phase = 0.0  # oscillation phase
 
         self._build()
 
@@ -51,27 +53,21 @@ class WaveformPanel(tk.Frame):
 
         self._line_a, = self._ax.plot(
             [], [], color=t.get("accent_green", "#66bb6a"),
-            linewidth=1.8, label="A", alpha=0.9,
+            linewidth=1.2, label="A", alpha=0.9,
         )
         self._line_b, = self._ax.plot(
             [], [], color=t.get("accent_orange", "#ffb74d"),
-            linewidth=1.8, label="B", alpha=0.9,
+            linewidth=1.2, label="B", alpha=0.9,
         )
         self._fill_a = None
         self._fill_b = None
-
-        # Current-time cursor
-        self._cursor = self._ax.axvline(
-            x=0, color=t.get("accent_cyan", "#39d2c0"),
-            linewidth=1.5, linestyle="--", alpha=0.6, zorder=10,
-        )
 
         self._ax.legend(loc="upper right", fontsize=7,
                          facecolor=t.get("waveform_bg", "#0a0a1a"),
                          edgecolor=t.get("waveform_grid", "#333333"),
                          labelcolor=t.get("text_muted", "#666666"))
         self._ax.set_xlim(0, self._visible_seconds)
-        self._ax.set_ylim(0, 200)
+        self._ax.set_ylim(-210, 210)
         self._fig.tight_layout(pad=1.5)
 
         self._canvas = FigureCanvasTkAgg(self._fig, master=self)
@@ -86,10 +82,11 @@ class WaveformPanel(tk.Frame):
         self._info_label.pack(pady=(0, 4))
 
     def start(self, get_a_value, get_b_value):
-        """Start continuous sampling. get_a_value/get_b_value are callables returning int."""
+        """Start continuous sampling."""
         self._get_a_value = get_a_value
         self._get_b_value = get_b_value
         self._history.clear()
+        self._phase = 0.0
         if self._tick_id:
             self.after_cancel(self._tick_id)
         self._tick()
@@ -102,7 +99,6 @@ class WaveformPanel(tk.Frame):
         self._get_b_value = None
 
     def _tick(self):
-        """Sample strength values and render."""
         if not self._get_a_value or not self._get_b_value:
             return
         try:
@@ -111,7 +107,6 @@ class WaveformPanel(tk.Frame):
         except Exception:
             a_val, b_val = 0, 0
         now = time.time()
-        # Only record when there's actual strength
         if a_val > 0 or b_val > 0:
             self._history.append((now, a_val, b_val))
         elif self._history:
@@ -122,6 +117,14 @@ class WaveformPanel(tk.Frame):
         self._update_info(a_val, b_val)
         self._tick_id = self.after(500, self._tick)
 
+    def _generate_wave(self, x_data, amplitude, phase_offset=0):
+        """Generate oscillating waveform with given amplitude."""
+        if amplitude == 0:
+            return [0.0] * len(x_data)
+        # ~5Hz oscillation (5 cycles per second)
+        freq = 5.0
+        return [amplitude * math.sin(2 * math.pi * freq * x + phase_offset) for x in x_data]
+
     def _render(self):
         if not self._history:
             return
@@ -130,17 +133,45 @@ class WaveformPanel(tk.Frame):
         x_min = now - self._visible_seconds
         x_max = now
 
-        xs_a, ys_a = [], []
-        xs_b, ys_b = [], []
+        # Collect amplitude data
+        ts_list = []
+        a_amps = []
+        b_amps = []
         for ts, a_val, b_val in self._history:
             if ts >= x_min - 1:
-                xs_a.append(ts - x_min)
-                ys_a.append(a_val)
-                xs_b.append(ts - x_min)
-                ys_b.append(b_val)
+                ts_list.append(ts)
+                a_amps.append(a_val)
+                b_amps.append(b_val)
 
-        self._line_a.set_data(xs_a, ys_a)
-        self._line_b.set_data(xs_b, ys_b)
+        if not ts_list:
+            return
+
+        # Generate high-res oscillating waveform
+        # Each sample spans 0.5 seconds, generate ~50 points per sample for smooth wave
+        points_per_sec = 100
+        all_x, all_y_a, all_y_b = [], [], []
+
+        for i, (ts, a_amp, b_amp) in enumerate(zip(ts_list, a_amps, b_amps)):
+            seg_start = ts - x_min
+            seg_end = seg_start + 0.5 if i < len(ts_list) - 1 else self._visible_seconds - (x_min if x_min < now else 0)
+            seg_end = min(seg_end, self._visible_seconds)
+
+            n_points = max(2, int((seg_end - seg_start) * points_per_sec))
+            xs = [seg_start + (seg_end - seg_start) * j / n_points for j in range(n_points)]
+
+            phase_a = self._phase + i * 1.5
+            phase_b = self._phase + i * 1.5 + 0.8
+            ya = self._generate_wave(xs, a_amp, phase_a)
+            yb = self._generate_wave(xs, b_amp, phase_b)
+
+            all_x.extend(xs)
+            all_y_a.extend(ya)
+            all_y_b.extend(yb)
+
+        self._phase += 0.3
+
+        self._line_a.set_data(all_x, all_y_a)
+        self._line_b.set_data(all_x, all_y_b)
 
         # Update fill
         if self._fill_a is not None:
@@ -149,24 +180,21 @@ class WaveformPanel(tk.Frame):
         if self._fill_b is not None:
             self._fill_b.remove()
             self._fill_b = None
-        if xs_a and ys_a:
+        if all_x and any(y != 0 for y in all_y_a):
             self._fill_a = self._ax.fill_between(
-                xs_a, ys_a, alpha=0.12,
+                all_x, all_y_a, alpha=0.08,
                 color=self._theme.get("accent_green", "#66bb6a"),
                 linewidth=0,
             )
-        if xs_b and ys_b:
+        if all_x and any(y != 0 for y in all_y_b):
             self._fill_b = self._ax.fill_between(
-                xs_b, ys_b, alpha=0.12,
+                all_x, all_y_b, alpha=0.08,
                 color=self._theme.get("accent_orange", "#ffb74d"),
                 linewidth=0,
             )
 
-        # Cursor at right edge (now)
-        self._cursor.set_xdata([self._visible_seconds])
-
         self._ax.set_xlim(0, self._visible_seconds)
-        self._ax.set_ylim(0, 200)
+        self._ax.set_ylim(-210, 210)
 
         self._canvas.draw()
 
@@ -193,6 +221,7 @@ class WaveformPanel(tk.Frame):
     def clear(self):
         self.stop()
         self._history.clear()
+        self._phase = 0.0
         self._line_a.set_data([], [])
         self._line_b.set_data([], [])
         if self._fill_a is not None:
@@ -201,9 +230,8 @@ class WaveformPanel(tk.Frame):
         if self._fill_b is not None:
             self._fill_b.remove()
             self._fill_b = None
-        self._cursor.set_xdata([self._visible_seconds])
         self._ax.set_xlim(0, self._visible_seconds)
-        self._ax.set_ylim(0, 200)
+        self._ax.set_ylim(-210, 210)
         self._canvas.draw()
         self.set_disconnected()
 
@@ -220,7 +248,6 @@ class WaveformPanel(tk.Frame):
             spine.set_color(t.get("waveform_grid", "#333333"))
         self._line_a.set_color(t.get("accent_green", "#66bb6a"))
         self._line_b.set_color(t.get("accent_orange", "#ffb74d"))
-        self._cursor.set_color(t.get("accent_cyan", "#39d2c0"))
         self._ax.legend(loc="upper right", fontsize=7,
                          facecolor=t.get("waveform_bg", "#0a0a1a"),
                          edgecolor=t.get("waveform_grid", "#333333"),
