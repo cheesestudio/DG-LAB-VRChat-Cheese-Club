@@ -4,6 +4,18 @@ VRChat + DG-LAB 设备联动控制工具，属于**芝士郊狼台球后援会**
 
 ---
 
+## 目录
+
+- [功能一览](#功能一览)
+- [快速开始](#快速开始)
+- [Avatar 参数说明](#avatar-参数说明)
+- [Chatbox 自定义](#chatbox-自定义)
+- [HTTP API](#http-api供-vrchat-udon-调用)
+- [常见问题排查](#常见问题排查)
+- [开发者](#开发者)
+
+---
+
 ## 功能一览
 
 | 功能 | 说明 |
@@ -43,7 +55,7 @@ VRChat + DG-LAB 设备联动控制工具，属于**芝士郊狼台球后援会**
 ### 3. 连接 VRChat
 
 1. 在 VRChat 中开启 OSC：`Action Menu → Osc → Enabled`
-2. 软件自动启动 OSC 服务（Chatbox 端口 `9000`，Avatar 端口 `9001`）
+2. 软件自动启动 OSC 服务（Avatar 端口 `9001`，Chatbox 端口 `9000`）
 3. 进入 VRChat 后，Avatar 参数变化会实时触发设备
 
 ### 4. 测试设备
@@ -259,39 +271,34 @@ build.bat
 | 通配符不生效 | 精确地址可收到但通配符收不到 | 改用精确地址替代通配符（如 `/avatar/parameters/Shock/TouchAreaA`） |
 | Avatar 未发布 | OSC 配置文件仅在 Avatar 发布后生效 | 将 Avatar 发布后再进入游戏 |
 
-### Avatar OSC 端口冲突（面捕软件）
+### Chatbox 端口冲突（面捕软件）
 
-当同时使用 VRCFaceTracking 等面捕软件时报错 `OSC监听失败` 或 `WinError 10048`，原因是面捕软件和你软件同时抢占 9001 端口。
+当同时使用 VRCFaceTracking 等面捕软件时，VRCFaceTracking 可能会失效或 Chatbox 不显示。原因是两个软件同时向 VRChat 的 9000 端口发送 OSC 数据，但 VRChat 只允许单连接。
 
-**解决方案：使用 osc-repeater 转发 OSC 数据**
+**解决方案：使用 osc-repeater 分离 Chatbox**
 
-1. 下载 [osc-repeater](https://github.com/CyCoreSystems/osc-repeater)（从 Release 下载 `osc-repeater_x.x.x_windows_amd64.exe`）
+1. 下载 [osc-repeater](https://github.com/CyCoreSystems/osc-repeater)
 2. 在 osc-repeater 同目录创建 `config.yaml`，内容如下：
 
 ```yaml
 listenPorts:
-  - 9001
+  - 9000
 targets:
-  - "127.0.0.1:9011"
-  - "127.0.0.1:9021"
+  - "127.0.0.1:9010"
+  - "127.0.0.1:9020"
 ```
 
-3. 面捕软件中修改 OSC Receiver 端口为 `9011`，保存后退出
-4. 将本软件 Avatar 端口（9001）改为 `9021`（此端口固定不可更改）
-5. **确认已退出**面捕软件和本软件
-6. 按顺序启动：osc-repeater → 面捕软件 → 本软件
+3. 将本软件 Chatbox 端口改为 `9010`
+4. 将 面捕软件 端口改为 `9020`
+4. 按顺序启动：osc-repeater → 本软件 → VRChat
 
-> 以后使用时只需按步骤 6 启动即可。VRChat 发出的 OSC 先到 osc-repeater（9001），再分别转发到 9011（面捕）和 9021（本软件）。
+> 需要 VRChat 支持多端口 OSC 接收（`Action Menu → Osc` 中添加额外端口 9020）。如果 VRChat 只支持单端口 9000，请考虑关闭本软件 Chatbox 功能。
 
 ### Chatbox 不显示状态
 
 | 原因 | 排查方法 | 解决方案 |
 |------|---------|---------|
-| VRChat Chatbox OSC 端口不对 | 确认软件 Chatbox 端口为 `9000` | 检查软件设置中 Chatbox 端口是否为 VRChat 接收端口（默认 9000） |
+| VRChat Chatbox OSC 端口不对 | 确认软件 Chatbox 端口为 `9000` | 检查软件设置中 Chatbox 端口是否为 VRChat 接收端口 |
 | Chatbox 功能未开启 | 软件设置中「Chatbox显示行」全部取消勾选 | 勾选至少一行显示内容 |
 | 网络配置问题 | 电脑有多个网络适配器（虚拟机、VPN 等） | 确保 VRChat 发送 OSC 的目标 IP 为本机局域网 IP |
-| VRCFaceTracking 同时发 chatbox | 两个软件同时向 9000 发数据 | 关闭本软件 Chatbox 功能，或仅在电击时显示 |
-
----
-
-## 开发者
+| VRCFaceTracking 抢占端口 | VRCFaceTracking 先占用了 9000 | 使用 osc-repeater 分离端口 |
