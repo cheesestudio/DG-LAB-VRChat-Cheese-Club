@@ -665,10 +665,8 @@ class App:
             self._ws_client = None
         self._stop_osc()
         self._save_settings_from_ui()
-        # Force destroy the root window to end mainloop
+        # Destroy window asynchronously to avoid blocking on background threads
         if self._window:
-            try:
-                self._window._root.destroy()
-            except Exception:
-                pass
+            root = self._window._root
             self._window = None
+            root.after(100, root.destroy)
