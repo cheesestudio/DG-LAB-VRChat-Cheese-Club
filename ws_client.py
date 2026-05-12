@@ -85,7 +85,17 @@ class WSClient:
     def _run_server(self):
         self._loop = asyncio.new_event_loop()
         asyncio.set_event_loop(self._loop)
-        self._loop.run_until_complete(self._server_main())
+        try:
+            self._loop.run_until_complete(self._server_main())
+        finally:
+            pending = [task for task in asyncio.all_tasks(self._loop) if not task.done()]
+            for task in pending:
+                task.cancel()
+            if pending:
+                self._loop.run_until_complete(asyncio.gather(*pending, return_exceptions=True))
+            self._loop.run_until_complete(self._loop.shutdown_asyncgens())
+            self._loop.close()
+            self._loop = None
 
     async def _server_main(self):
         async def handler(ws):
@@ -117,10 +127,14 @@ class WSClient:
                 compression=None,
                 server_header=None,
             ):
-                await asyncio.Future()
+                while self._running:
+                    await asyncio.sleep(0.2)
+        except asyncio.CancelledError:
+            pass
         except Exception as e:
-            self._on_message({"type": "error", "text": f"服务器启动失败: {e}"})
-            self._on_status("disconnected")
+            if self._running:
+                self._on_message({"type": "error", "text": f"服务器启动失败: {e}"})
+                self._on_status("disconnected")
 
     async def _handle_client(self, ws):
         """Handle a new WebSocket connection (APP connects here)."""
@@ -313,12 +327,6 @@ class WSClient:
                 fut = asyncio.run_coroutine_threadsafe(ws.close(), self._loop) if self._loop else None
                 if fut:
                     fut.result(timeout=1)
-            except Exception:
-                pass
-        # Now stop the event loop
-        if self._loop:
-            try:
-                self._loop.call_soon_threadsafe(self._loop.stop)
             except Exception:
                 pass
         if self._thread:

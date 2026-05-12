@@ -1,7 +1,11 @@
 import tkinter as tk
 import collections
 import time
+from matplotlib import rcParams
 from matplotlib.figure import Figure
+
+rcParams["font.sans-serif"] = ["Microsoft YaHei UI", "Microsoft YaHei", "SimHei", "DejaVu Sans"]
+rcParams["axes.unicode_minus"] = False
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 
 

@@ -266,6 +266,8 @@ class AvatarManager:
         self._osc_thread = None
         self._running = False
         self._bg_loop = None
+        self._bg_tasks = []
+        self._bg_thread = None
 
     def configure(self, channel_a_params: list, channel_a_mode: str, channel_a_config: dict,
                   channel_b_params: list, channel_b_mode: str, channel_b_config: dict):
@@ -294,25 +296,34 @@ class AvatarManager:
             for ch in ["A", "B"]:
                 handler = self._channels.get(ch)
                 if handler and handler.mode in ("distance", "touch"):
-                    asyncio.ensure_future(self._wave_feeder(ch))
-            asyncio.ensure_future(self._clear_checker())
-            asyncio.ensure_future(self._shock_checker())
+                    self._bg_tasks.append(asyncio.ensure_future(self._wave_feeder(ch)))
+            self._bg_tasks.append(asyncio.ensure_future(self._clear_checker()))
+            self._bg_tasks.append(asyncio.ensure_future(self._shock_checker()))
         else:
             # Run in a separate thread with its own event loop
             def _run():
                 new_loop = asyncio.new_event_loop()
                 asyncio.set_event_loop(new_loop)
                 self._bg_loop = new_loop
-                for ch in ["A", "B"]:
-                    handler = self._channels.get(ch)
-                    if handler and handler.mode in ("distance", "touch"):
-                        new_loop.create_task(self._wave_feeder(ch))
-                new_loop.create_task(self._clear_checker())
-                new_loop.create_task(self._shock_checker())
-                new_loop.run_forever()
+                try:
+                    for ch in ["A", "B"]:
+                        handler = self._channels.get(ch)
+                        if handler and handler.mode in ("distance", "touch"):
+                            self._bg_tasks.append(new_loop.create_task(self._wave_feeder(ch)))
+                    self._bg_tasks.append(new_loop.create_task(self._clear_checker()))
+                    self._bg_tasks.append(new_loop.create_task(self._shock_checker()))
+                    new_loop.run_forever()
+                finally:
+                    pending = [task for task in self._bg_tasks if not task.done()]
+                    for task in pending:
+                        task.cancel()
+                    if pending:
+                        new_loop.run_until_complete(asyncio.gather(*pending, return_exceptions=True))
+                    new_loop.run_until_complete(new_loop.shutdown_asyncgens())
+                    new_loop.close()
 
-            t = threading.Thread(target=_run, daemon=True)
-            t.start()
+            self._bg_thread = threading.Thread(target=_run, daemon=True)
+            self._bg_thread.start()
 
     async def _wave_feeder(self, channel: str):
         """Background task that continuously feeds waveforms for distance/touch modes."""
@@ -354,12 +365,19 @@ class AvatarManager:
     def stop(self):
         """Stop OSC listening and background tasks."""
         self._running = False
-        if self._bg_loop:
+        loop = self._bg_loop
+        if loop:
             try:
-                self._bg_loop.call_soon_threadsafe(self._bg_loop.stop)
+                for task in list(self._bg_tasks):
+                    loop.call_soon_threadsafe(task.cancel)
+                loop.call_soon_threadsafe(loop.stop)
             except Exception:
                 pass
-            self._bg_loop = None
+        if self._bg_thread:
+            self._bg_thread.join(timeout=2)
+            self._bg_thread = None
+        self._bg_loop = None
+        self._bg_tasks = []
         if self._osc_server:
             try:
                 self._osc_server.shutdown()
@@ -367,6 +385,7 @@ class AvatarManager:
                 pass
             self._osc_server = None
             self._on_log("Avatar OSC 已停止", "info")
+
 
     def send_shock(self, channel: str, duration: float = 2.0, wave_data: str = None):
         """Manually trigger a shock on a channel."""
