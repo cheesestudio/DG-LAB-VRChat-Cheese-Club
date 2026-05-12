@@ -349,7 +349,7 @@ class AvatarManager:
                     if duration is not None:
                         wave = handler._handler_impl.wave_data
                         logger.info(f"[Avatar] CH{ch} sending shock wave, duration={duration}s")
-                        self._on_wave(ch, wave)
+                        self._on_wave(ch, wave, duration)
 
     def stop(self):
         """Stop OSC listening and background tasks."""

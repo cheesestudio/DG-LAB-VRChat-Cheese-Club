@@ -179,6 +179,8 @@ QQ:757992539 | v1.1        ← 固定显示
 
 软件在端口 `8800` 提供了 HTTP 接口，可被 VRChat 中的 Udon 程序调用：
 
+> HTTP 接口默认只接受 `User-Agent` 包含 `UnityPlayer` 的请求。浏览器直接打开示例地址可能返回 `403 origin not allowed`，请从 VRChat/Udon 中调用，或使用带 `UnityPlayer` User-Agent 的调试工具测试。
+
 | 接口 | 说明 | 示例 |
 |------|------|------|
 | `GET /api/v1/status` | 查询设备连接状态 | `http://localhost:8800/api/v1/status` |

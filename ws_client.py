@@ -370,7 +370,7 @@ class WSClient:
                 self._send_to_app("msg", f"strength-2+1+{b_limit}"), self._loop
             )
 
-    def send_waveform(self, channel: str, hex_data, duration: int = 5):
+    def send_waveform(self, channel: str, hex_data, duration: int = None):
         if not self.is_paired:
             return
         if isinstance(hex_data, list):
@@ -384,6 +384,16 @@ class WSClient:
             return
         if not isinstance(hex_data, list) or not hex_data:
             return
+
+        if duration is not None:
+            try:
+                target_len = max(1, int(float(duration) * 10))
+            except (TypeError, ValueError):
+                target_len = 0
+            if target_len > 0 and len(hex_data) < target_len:
+                repeats = (target_len + len(hex_data) - 1) // len(hex_data)
+                hex_data = (hex_data * repeats)[:target_len]
+
         # pydglab_ws limit: max 86 entries per message, max 1950 chars
         CHUNK_SIZE = 86
         if self._loop and self._loop.is_running():

@@ -125,6 +125,7 @@ class App:
 
         # Accumulate remaining time with 1s/10s safety limit
         now = _time.time()
+        was_shock_active = now < self._shock_end_time
         self._shock_recent_events_log.append((now, seconds))
         self._shock_recent_events_log = [(t, s) for t, s in self._shock_recent_events_log if now - t <= 1.0]
         recent_sum = sum(s for _, s in self._shock_recent_events_log)
@@ -132,12 +133,12 @@ class App:
             # Clamp: only allow what fits within the 10s limit
             allowed = max(0, 10 - (recent_sum - seconds))
             seconds = allowed
-            self._shock_recent_events[-1] = (now, seconds)
+            self._shock_recent_events_log[-1] = (now, seconds)
         if seconds <= 0:
             self._log_to_console(f"安全限制: 1秒内累计已超10秒，忽略本次电击", "warning")
             return
         # 30-second total cap (always enforce, even across shock gaps)
-        if now < self._shock_end_time:
+        if was_shock_active:
             current_remaining = self._shock_end_time - now
         else:
             current_remaining = 0
@@ -146,7 +147,7 @@ class App:
             if seconds <= 0:
                 self._log_to_console("安全限制: 总时长已达30秒上限", "warning")
                 return
-        if now < self._shock_end_time:
+        if was_shock_active:
             self._shock_remaining_a += seconds
             self._shock_remaining_b += seconds
         else:
@@ -163,8 +164,8 @@ class App:
         self._waveform_name_b = b_name
 
         if self._ws_client and self._ws_client.is_paired:
-            # Only clear if no shock is currently playing
-            if now >= self._shock_end_time:
+            # 仅在此触发之前没有任何波形正在播放时才清除
+            if not was_shock_active:
                 self._ws_client.clear_waveform("A")
                 self._ws_client.clear_waveform("B")
             # Set strength before waveform (use after to avoid blocking main thread)
@@ -494,9 +495,9 @@ class App:
             panel = self._window.osc_panel
             self._window.after(0, lambda p=params, pan=panel: pan.update_params(p))
 
-    def _on_avatar_wave(self, channel: str, wave_hex):
+    def _on_avatar_wave(self, channel: str, wave_hex, duration=None):
         if self._ws_client and self._ws_client.is_paired:
-            self._ws_client.send_waveform(channel, wave_hex)
+            self._ws_client.send_waveform(channel, wave_hex, duration=duration)
             try:
                 self._window.waveform_panel.set_active(True)
             except Exception:
@@ -558,17 +559,18 @@ class App:
         # Accumulate remaining time
         import time as _time
         now = _time.time()
+        was_shock_active = now < self._shock_end_time
         self._shock_recent_events_http.append((now, seconds))
         self._shock_recent_events_http = [(t, s) for t, s in self._shock_recent_events_http if now - t <= 1.0]
         recent_sum = sum(s for _, s in self._shock_recent_events_http)
         if recent_sum > 10:
             allowed = max(0, 10 - (recent_sum - seconds))
             seconds = allowed
-            self._shock_recent_events[-1] = (now, seconds)
+            self._shock_recent_events_http[-1] = (now, seconds)
         if seconds <= 0:
             return
         # 30-second total cap (always enforce, even across shock gaps)
-        if now < self._shock_end_time:
+        if was_shock_active:
             current_remaining = self._shock_end_time - now
         else:
             current_remaining = 0
@@ -576,7 +578,7 @@ class App:
             seconds = max(0, 30 - current_remaining)
             if seconds <= 0:
                 return
-        if now < self._shock_end_time:
+        if was_shock_active:
             self._shock_remaining_a += seconds
             self._shock_remaining_b += seconds
         else:
@@ -591,8 +593,8 @@ class App:
 
         self._ws_client.force_strength(a_limit, b_limit)
 
-        # Only clear if no shock is currently playing
-        should_clear = now >= self._shock_end_time
+        # 仅在此触发之前没有任何波形正在播放时才清除
+        should_clear = not was_shock_active
         # Determine which channels to send
         custom_wf = self._window.settings_panel.get_custom_waveform() if wf_mode == "custom" else ""
         if mode == 0:  # A only
