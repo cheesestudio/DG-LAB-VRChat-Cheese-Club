@@ -126,6 +126,7 @@ class WSClient:
                 ping_interval=None,
                 compression=None,
                 server_header=None,
+                close_timeout=1,
             ):
                 while self._running:
                     await asyncio.sleep(0.2)
@@ -145,7 +146,7 @@ class WSClient:
         self._on_message({"type": "debug", "text": f"发送: {bind_init[:120]}"})
         await ws.send(bind_init)
 
-        hb_task = asyncio.ensure_future(self._heartbeat(ws))
+        bg_tasks = [asyncio.ensure_future(self._heartbeat(ws))]
 
         try:
             async for raw_message in ws:
@@ -183,8 +184,8 @@ class WSClient:
 
                         a_limit = self._on_get_a_limit() if self._on_get_a_limit else 200
                         b_limit = self._on_get_b_limit() if self._on_get_b_limit else 200
-                        asyncio.ensure_future(self._init_strength(a_limit, b_limit))
-                        asyncio.ensure_future(self._periodic_strength(a_limit, b_limit))
+                        bg_tasks.append(asyncio.ensure_future(self._init_strength(a_limit, b_limit)))
+                        bg_tasks.append(asyncio.ensure_future(self._periodic_strength(a_limit, b_limit)))
                     else:
                         resp = _make_msg("bind", client_id=msg_client, target_id=msg_target, message="400")
                         await ws.send(resp)
@@ -223,18 +224,25 @@ class WSClient:
                 else:
                     self._on_message({"type": "debug", "text": f"未知消息类型: {msg_type} data={str(msg_data)[:80]}"})
 
+        except asyncio.CancelledError:
+            pass
         except Exception as e:
-            self._on_message({"type": "warning", "text": f"连接异常: {e}"})
+            if self._running:
+                self._on_message({"type": "warning", "text": f"连接异常: {e}"})
         finally:
-            hb_task.cancel()
+            for task in bg_tasks:
+                task.cancel()
+            if bg_tasks:
+                await asyncio.gather(*bg_tasks, return_exceptions=True)
             with self._lock:
                 if self._app_target_id:
                     self._uuid_to_ws.pop(self._app_target_id, None)
                 self._bound = False
                 self._app_target_id = None
                 self._app_uuid_in_bind = None
-            self._on_message({"type": "warning", "text": "APP已断开"})
-            self._on_status("connected")
+            if self._running:
+                self._on_message({"type": "warning", "text": "APP已断开"})
+                self._on_status("connected")
 
     async def _heartbeat(self, ws):
         while True:
@@ -306,6 +314,19 @@ class WSClient:
         except Exception as e:
             self._on_message({"type": "debug", "text": f"发送异常: {e}"})
 
+    async def _graceful_close_ws(self, ws):
+        with self._lock:
+            target = self._app_target_id
+        if target:
+            try:
+                # 通知客户端断开 break/209
+                await ws.send(_make_msg("break", client_id=self._local_client_id, target_id=target, message="209"))
+                await asyncio.sleep(0.1)
+            except Exception as e:
+                self._on_message({"type": "debug", "text": f"断开通知发送异常: {e}"})
+        await ws.close(code=1000, reason="client disconnected")
+        await ws.wait_closed()
+
     def connect(self, host: str = "0.0.0.0", port: int = 9999):
         if self._running:
             return
@@ -324,9 +345,9 @@ class WSClient:
             targets = list(self._uuid_to_ws.values())
         for ws in targets:
             try:
-                fut = asyncio.run_coroutine_threadsafe(ws.close(), self._loop) if self._loop else None
+                fut = asyncio.run_coroutine_threadsafe(self._graceful_close_ws(ws), self._loop) if self._loop else None
                 if fut:
-                    fut.result(timeout=1)
+                    fut.result(timeout=3)
             except Exception:
                 pass
         if self._thread:
