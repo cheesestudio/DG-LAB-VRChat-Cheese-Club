@@ -83,6 +83,7 @@ class WSClient:
         self._strength_max = {"A": 200, "B": 200}
         self._waveform_active = False  # Suppress reactive strength correction during waveform playback
         self._server_socket = None
+        self._init_task: Optional[asyncio.Task] = None  # track init strength task for cancellation
 
     def _run_server(self):
         self._loop = asyncio.new_event_loop()
@@ -179,7 +180,10 @@ class WSClient:
 
                         a_limit = self._on_get_a_limit() if self._on_get_a_limit else 200
                         b_limit = self._on_get_b_limit() if self._on_get_b_limit else 200
-                        asyncio.ensure_future(self._init_strength(a_limit, b_limit))
+                        if self._init_task and not self._init_task.done():
+                            self._init_task.cancel()
+                            self._init_task = None
+                        self._init_task = asyncio.ensure_future(self._init_strength(a_limit, b_limit))
                     else:
                         resp = _make_msg("bind", client_id=msg_client, target_id=msg_target, message="400")
                         await ws.send(resp)
@@ -227,10 +231,18 @@ class WSClient:
             self._on_message({"type": "warning", "text": f"连接异常: {e}"})
         finally:
             hb_task.cancel()
+            if self._init_task and not self._init_task.done():
+                self._init_task.cancel()
             try:
-                await asyncio.gather(hb_task, return_exceptions=True)
+                tasks = [hb_task]
+                if self._init_task:
+                    tasks.append(self._init_task)
+                await asyncio.gather(*tasks, return_exceptions=True)
+            except asyncio.CancelledError:
+                pass
             except Exception:
                 pass
+            self._init_task = None
             with self._lock:
                 if self._app_target_id:
                     self._uuid_to_ws.pop(self._app_target_id, None)
@@ -249,16 +261,22 @@ class WSClient:
                 if target:
                     hb = _make_msg("heartbeat", client_id=self._local_client_id, target_id=target, message="200")
                     await ws.send(hb)
-            except Exception:
+            except asyncio.CancelledError:
+                raise  # Re-raise CancelledError so gather() sees clean cancellation
+            except Exception as e:
+                self._on_message({"type": "warning", "text": f"Heartbeat异常退出: {type(e).__name__}: {e}"})
                 break
 
     async def _init_strength(self, a_limit: int = 200, b_limit: int = 200):
-        await asyncio.sleep(2)  # Wait for APP to fully initialize
-        # Match reference project: set to 1 first, let reactive correction raise to limit
-        await self._send_to_app("msg", f"strength-1+2+1")
-        await asyncio.sleep(0.5)
-        await self._send_to_app("msg", f"strength-2+2+1")
-        self._on_message({"type": "info", "text": f"强度初始化 A:{a_limit} B:{b_limit}"})
+        try:
+            await asyncio.sleep(2)  # Wait for APP to fully initialize
+            # Match reference project: set to 1 first, let reactive correction raise to limit
+            await self._send_to_app("msg", f"strength-1+2+{a_limit}")
+            await asyncio.sleep(0.5)
+            await self._send_to_app("msg", f"strength-2+2+{b_limit}")
+            self._on_message({"type": "info", "text": f"强度初始化 A:{a_limit} B:{b_limit}"})
+        except asyncio.CancelledError:
+            raise  # Re-raise so gather() sees clean cancellation
 
     async def _send_to_app(self, msg_type: str, message: str):
         """Send a message to the APP."""

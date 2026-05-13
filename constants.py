@@ -10,9 +10,9 @@ DEFAULT_HTTP_PORT = 8800
 DEFAULT_CHATBOX_PORT = 9000
 
 # Safety limits
-SAFETY_WINDOW_SECONDS = 1.0
-SAFETY_MAX_PER_WINDOW = 10
-SAFETY_MAX_TOTAL = 15
+SAFETY_WINDOW_SECONDS = 10.0  # 10-second window for shock accumulation
+SAFETY_MAX_PER_WINDOW = 30     # max 30 seconds per window (≈3 overlapping 9s shocks)
+SAFETY_MAX_TOTAL = 30          # max 30 seconds total remaining
 
 # Intensity limits
 MIN_INTENSITY = 0

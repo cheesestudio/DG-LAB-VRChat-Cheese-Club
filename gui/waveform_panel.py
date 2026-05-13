@@ -30,6 +30,7 @@ class WaveformPanel(tk.Frame):
         self._active = False
         self._push_pending = []  # thread-safe push buffer
         self._lock = threading.Lock()
+        self._push_max_pending = 200  # cap pending buffer to prevent unbounded growth
 
         # Current intensity values for display
         self._current_a = 0
@@ -101,7 +102,7 @@ class WaveformPanel(tk.Frame):
         ).pack(side="left", padx=(2, 0))
 
         # Matplotlib figure with two subplots
-        self._fig = Figure(figsize=(8, 5), dpi=100, facecolor=t.get("waveform_bg", "#0a0a1a"))
+        self._fig = Figure(figsize=(8, 5), dpi=60, facecolor=t.get("waveform_bg", "#0a0a1a"))
 
         # Create two subplots stacked vertically
         self._ax_a = self._fig.add_subplot(211)
@@ -135,7 +136,7 @@ class WaveformPanel(tk.Frame):
         self._line_b, = self._ax_b.plot([], [], color=t.get("accent_orange", "#ffb74d"),
                                         linewidth=1.5, alpha=0.9)
 
-        # Fill objects
+        # Fill objects (removed - fill_between was causing memory growth)
         self._fill_a = None
         self._fill_b = None
 
@@ -183,12 +184,20 @@ class WaveformPanel(tk.Frame):
             return
         with self._lock:
             self._push_pending.append((a_intensities, b_intensities, base_time))
+            # Cap pending buffer to prevent unbounded growth
+            while len(self._push_pending) > self._push_max_pending:
+                self._push_pending.pop(0)
 
     def _flush_push(self):
         """Called from main thread tick to consume pending push data."""
         with self._lock:
             pending = self._push_pending[:]
             self._push_pending.clear()
+        # Cap history to prevent unbounded growth
+        while len(self._history) > self._history.maxlen * 2:
+            trim = len(self._history) - self._history.maxlen
+            for _ in range(trim):
+                self._history.popleft()
         dt = self.SUB_INTERVAL
         for a_ints, b_ints, base_time in pending:
             max_len = max(len(a_ints), len(b_ints))
@@ -201,9 +210,14 @@ class WaveformPanel(tk.Frame):
     def _tick(self):
         if self._tick_stopped:
             return
+        # When inactive, only run very lightweight info updates at 1s interval
+        if not self._active:
+            self._update_info()
+            self._tick_id = self.after(1000, self._tick)
+            return
         self._flush_push()
         now = time.time()
-        if self._active and self._history:
+        if self._history:
             self._render(now)
         self._update_info(now)
         self._tick_id = self.after(100, self._tick)
@@ -236,27 +250,7 @@ class WaveformPanel(tk.Frame):
 
         # Update channel A
         self._line_a.set_data(xs_a, ys_a)
-        if self._fill_a is not None:
-            self._fill_a.remove()
-            self._fill_a = None
-        if xs_a:
-            self._fill_a = self._ax_a.fill_between(
-                xs_a, ys_a, alpha=0.3,
-                color=self._theme.get("accent_green", "#66bb6a"),
-                linewidth=0,
-            )
-
-        # Update channel B
         self._line_b.set_data(xs_b, ys_b)
-        if self._fill_b is not None:
-            self._fill_b.remove()
-            self._fill_b = None
-        if xs_b:
-            self._fill_b = self._ax_b.fill_between(
-                xs_b, ys_b, alpha=0.3,
-                color=self._theme.get("accent_orange", "#ffb74d"),
-                linewidth=0,
-            )
 
         # Update axes
         self._ax_a.set_xlim(0, self._visible_seconds)

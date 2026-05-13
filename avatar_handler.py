@@ -73,6 +73,7 @@ class ShockMode:
         self.trigger_top = config.get("trigger_range", {}).get("top", 1.0)
         self._last_trigger_time = 0.0
         self._last_value = 0.0
+        self._triggered_duration: Optional[float] = None
 
     def on_value(self, value: float) -> None:
         self._last_value = value
@@ -117,6 +118,7 @@ class TouchMode:
     def on_value(self, value: float):
         norm = self.normalize(value)
         if norm == 0:
+            self.dist_arr.clear()  # clear history when value drops to zero
             return
         self.dist_arr.append([time.time(), norm])
 
