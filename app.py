@@ -19,26 +19,31 @@ logger = logging.getLogger(__name__)
 
 
 def _flat_waveform_entry(intensity: int) -> str:
-    """Generate FFFFIIII format: 4 freq bytes then 4 intensity bytes."""
-    i = max(MIN_INTENSITY, min(MAX_INTENSITY, intensity))
-    return f"0A0A0A0A{i:02X}{i:02X}{i:02X}{i:02X}"
+    """Generate V3 8-byte hex: 4 carrier bytes + 4 pulse bytes.
+    UI intensity 0-200 maps to hex pulse 0-100 (0x00-0x64)."""
+    i = max(MIN_INTENSITY, min(MAX_INTENSITY, intensity)) // 2  # 0-200 → 0-100 hex
+    i = max(0, min(100, i))
+    # Moderate carrier (0x32 = 50) for a balanced sensation
+    return f"32323232{i:02X}{i:02X}{i:02X}{i:02X}"
 
 
 def _ramp_waveform(seconds: int, target_intensity: int) -> list:
-    """Generate ramp waveform matching Shocking-VRChat DEFAULT_WAVE style.
-    Linearly ramps from 0 to target_intensity over the given duration."""
+    """Generate ramp waveform — carrier and pulse both rise linearly."""
     count = seconds * 10
     entries = []
     for i in range(count):
         t = i / max(count - 1, 1)
-        val = max(MIN_INTENSITY, min(MAX_INTENSITY, int(target_intensity * t)))
-        entries.append(f"0A0A0A0A{val:02X}{val:02X}{val:02X}{val:02X}")
+        ui_val = max(MIN_INTENSITY, min(MAX_INTENSITY, int(target_intensity * t)))
+        hex_pulse = max(0, min(100, ui_val // 2))
+        # Carrier ramps from 10 to 60 alongside pulse
+        carrier = int(10 + 50 * t)
+        entries.append(f"{carrier:02X}{carrier:02X}{carrier:02X}{carrier:02X}{hex_pulse:02X}{hex_pulse:02X}{hex_pulse:02X}{hex_pulse:02X}")
     return entries
 
 
 def _decode_wave_hex(hex_entries):
-    """Decode FFFFIIII hex entries into flat list of intensity values.
-    Each entry: first 8 chars = freq[4], last 8 chars = intensity[4]."""
+    """Decode V3 hex: first 8 = carrier[4], last 8 = pulse[4].
+    Returns pulse values scaled to 0-200 UI range (hex 0-100 * 2)."""
     result = []
     if not isinstance(hex_entries, list):
         return result
@@ -49,7 +54,7 @@ def _decode_wave_hex(hex_entries):
             pos = 8 + j * 2
             if pos + 2 <= len(entry):
                 try:
-                    result.append(int(entry[pos:pos + 2], 16))
+                    result.append(int(entry[pos:pos + 2], 16) * 2)
                 except ValueError:
                     result.append(0)
     return result

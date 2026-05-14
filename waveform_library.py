@@ -176,43 +176,45 @@ def get_random() -> tuple[str, list[str]]:
 
 
 def scale_waveform(data: list[str], intensity: int) -> list[str]:
-    """缩放波形数据到指定强度 (0-200)
-    FFFFIIII格式: 前8字符(freq[4]), 后8字符(intensity[4])
-    只缩放强度值，频率保持不变
+    """缩放波形数据到指定强度 (0-200 UI range → 0-100 hex pulse range)
+    格式: 前8字符=carrier[4], 后8字符=pulse[4]
+    只缩放pulse值，carrier保持不变。
+    Pulse hex max is 0x64 (100) per DG-LAB V3 protocol.
     """
     if not data:
         return data
-    # 找到波形中的最大强度值 (FFFFIIII: intensity在每entry的后8字符)
-    max_intensity = 0
+    # 找到波形中的最大pulse值
+    max_pulse = 0
     for entry in data:
-        # intensity部分: 字符8-16 (每entry 16字符: 前8=fff, 后8=iii)
         for j in range(4):
             pos = 8 + j * 2
             if pos + 2 <= len(entry):
                 try:
                     val = int(entry[pos:pos + 2], 16)
-                    max_intensity = max(max_intensity, val)
+                    max_pulse = max(max_pulse, val)
                 except ValueError:
                     pass
-    if max_intensity == 0:
+    if max_pulse == 0:
         return data
 
-    scale = intensity / max_intensity
+    # UI intensity 0-200 maps to hex pulse 0-100
+    target_hex = intensity // 2
+    scale = target_hex / max_pulse
     result = []
     for entry in data:
         if len(entry) >= 16:
-            freq_part = entry[:8]  # FFFF: 前4字节频率
-            inten_part = entry[8:16]  # IIII: 后4字节强度
-            new_inten = ""
+            carrier_part = entry[:8]
+            pulse_part = entry[8:16]
+            new_pulse = ""
             for j in range(4):
                 pos = j * 2
                 try:
-                    inten = int(inten_part[pos:pos + 2], 16)
-                    new_int = min(200, int(inten * scale))
-                    new_inten += f"{new_int:02X}"
+                    pulse_val = int(pulse_part[pos:pos + 2], 16)
+                    new_val = min(100, max(0, int(pulse_val * scale)))
+                    new_pulse += f"{new_val:02X}"
                 except ValueError:
-                    new_inten += inten_part[pos:pos + 2]
-            result.append(freq_part + new_inten)
+                    new_pulse += pulse_part[pos:pos + 2]
+            result.append(carrier_part + new_pulse)
         else:
             result.append(entry)
     return result

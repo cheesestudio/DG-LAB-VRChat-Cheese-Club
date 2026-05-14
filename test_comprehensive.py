@@ -23,33 +23,33 @@ class MockWebSocket:
 
 # ========== 1. Waveform format ==========
 def test_flat_waveform_entry():
-    """FFFFIIII format correctness."""
+    """V3 hex format: 4 carrier bytes + 4 pulse bytes."""
     for i in range(0, 201, 10):
         entry = _flat_waveform_entry(i)
         assert len(entry) == 16, f"Length wrong for {i}: {len(entry)}"
-        freq = int(entry[0:2], 16)
-        intensity = int(entry[8:10], 16)
-        assert freq == 0x0A, f"Freq wrong: {freq}"
-        assert intensity == i, f"Intensity wrong for {i}: {intensity}"
+        carrier = int(entry[0:2], 16)
+        pulse = int(entry[8:10], 16)
+        assert carrier == 0x32, f"Carrier wrong: {carrier}"  # moderate sensation
+        assert pulse == i // 2, f"Pulse wrong for {i}: {pulse}"  # 0-200 UI → 0-100 hex
     print("PASS: flat_waveform_entry (0-200)")
 
 
 # ========== 2. Decode hex ==========
 def test_decode_wave_hex():
-    """Decode FFFFIIII entries to intensity list."""
-    # All same
-    r = _decode_wave_hex(["0A0A0A0A64646464"])
-    assert r == [100, 100, 100, 100], f"Got {r}"
+    """Decode V3 hex entries: hex pulse (0-100) → UI display (0-200)."""
+    # All pulse=100 → display=200
+    r = _decode_wave_hex(["5050505064646464"])
+    assert r == [200, 200, 200, 200], f"Got {r}"
     # Mixed
-    r = _decode_wave_hex(["0A0A0A0A003264C8"])
-    assert r == [0, 50, 100, 200], f"Got {r}"
+    r = _decode_wave_hex(["5050505000326464"])
+    assert r == [0, 100, 200, 200], f"Got {r}"
     # Multiple entries
-    r = _decode_wave_hex(["0A0A0A0A64646464", "0A0A0A0A003264C8"])
+    r = _decode_wave_hex(["5050505064646464", "5050505000326464"])
     assert len(r) == 8, f"Got {len(r)} values"
     # Edge cases
-    r = _decode_wave_hex(["0A0A0A0A00000000"])
+    r = _decode_wave_hex(["5050505000000000"])
     assert r == [0, 0, 0, 0], f"Got {r}"
-    r = _decode_wave_hex(["0A0A0A0AC8C8C8C8"])
+    r = _decode_wave_hex(["5050505064646464"])
     assert r == [200, 200, 200, 200], f"Got {r}"
     print("PASS: decode_wave_hex")
 
@@ -64,9 +64,9 @@ def test_generate_ab_waveforms():
         for entry in a + b:
             assert len(entry) == 16, f"entry length: {len(entry)}"
             int(entry, 16)  # must be valid hex
-        # Intensities in range
+        # Display intensities in range (hex 0-100 → UI 0-200)
         for v in _decode_wave_hex(a + b):
-            assert 0 <= v <= 200, f"Intensity out of range: {v}"
+            assert 0 <= v <= 200, f"Display intensity out of range: {v}"
     print("PASS: generate_ab_waveforms (1-10s)")
 
 
@@ -93,20 +93,26 @@ def test_all_presets():
         for entry in data:
             assert len(entry) == 16, f"Preset '{name}': bad entry {entry}"
             int(entry, 16)
+            # Pulse bytes are positions 8-15, max 0x64 (100)
+            for j in range(4):
+                pulse_hex = int(entry[8+j*2:10+j*2], 16)
+                assert 0 <= pulse_hex <= 100, f"Preset '{name}': pulse hex {pulse_hex}"
         ints = _decode_wave_hex(data)
         for v in ints:
-            assert 0 <= v <= 200, f"Preset '{name}': intensity {v}"
+            assert 0 <= v <= 200, f"Preset '{name}': display intensity {v}"
     print(f"PASS: all {len(PRESETS)} presets valid")
 
 
 # ========== 6. Waveform display data ==========
 def test_waveform_to_display_data():
-    """Waveform to display data conversion."""
-    entries = ["0A0A0A0A64646464", "0A0A0A0A00C800C8"]
+    """Waveform to display data conversion (hex 0-100 → UI 0-200)."""
+    entries = ["5050505064646464", "5050505000646400"]
     result = waveform_to_display_data(entries)
     assert len(result) == 2
-    assert result[0] == 100  # average of [100,100,100,100]
-    assert result[1] == 100  # average of [0,200,0,200]
+    # Average of [200,200,200,200] = 200
+    assert result[0] == 200, f"Got {result[0]}"
+    # Average of [0,200,200,0] = 100
+    assert result[1] == 100, f"Got {result[1]}"
     print("PASS: waveform_to_display_data")
 
 

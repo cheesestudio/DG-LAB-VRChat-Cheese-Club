@@ -84,7 +84,6 @@ class WSClient:
         self._waveform_active = False  # Suppress reactive strength correction during waveform playback
         self._server_socket = None
         self._init_task: Optional[asyncio.Task] = None  # track init strength task for cancellation
-        self._last_recv_time = 0.0  # Track last message time for dead-connection detection
 
     def _run_server(self):
         self._loop = asyncio.new_event_loop()
@@ -147,8 +146,6 @@ class WSClient:
 
         try:
             async for raw_message in ws:
-                import time as _time
-                self._last_recv_time = _time.time()
                 self._on_message({"type": "debug", "text": f"收到: {str(raw_message)[:150]}"})
                 try:
                     event = json.loads(raw_message)
@@ -260,18 +257,9 @@ class WSClient:
             self._on_status("connected")
 
     async def _heartbeat(self, ws):
-        import time as _time
         while True:
             try:
                 await asyncio.sleep(60)
-                # Detect dead connection: no message from APP in 120 seconds
-                if self._last_recv_time > 0 and _time.time() - self._last_recv_time > 120:
-                    self._on_message({"type": "warning", "text": "APP心跳超时(120s无消息)，断开连接"})
-                    try:
-                        await ws.close()
-                    except Exception:
-                        pass
-                    break
                 with self._lock:
                     target = self._app_target_id
                 if target:
