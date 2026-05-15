@@ -91,13 +91,16 @@ class WSClient:
         self._loop = asyncio.new_event_loop()
         asyncio.set_event_loop(self._loop)
 
-        # Suppress Windows IOCP errors (OSError 995) during shutdown
+        # Custom exception handler: suppress expected errors during shutdown
         _default_handler = self._loop.get_exception_handler()
 
         def _shutdown_exception_handler(loop, context):
+            # During shutdown, suppress all asyncio errors (IOCP abort, closed loop, etc.)
+            if not self._running:
+                return
             exc = context.get("exception")
             if isinstance(exc, OSError) and getattr(exc, "winerror", None) == 995:
-                return  # Suppress IOCP abort during shutdown
+                return  # Suppress IOCP abort
             if _default_handler:
                 _default_handler(loop, context)
             else:
@@ -112,23 +115,34 @@ class WSClient:
             if "Event loop stopped" not in str(e):
                 logger.error(f"服务器线程异常: {e}")
         finally:
-            # Cancel all remaining tasks with a short timeout
-            # On Windows, IOCP tasks may take seconds to cancel — don't wait forever
+            # Give websockets internal tasks time to finish naturally.
+            # websockets uses asyncio.shield() internally so cancellation
+            # doesn't propagate — we must let them complete on their own.
+            try:
+                self._loop.run_until_complete(asyncio.sleep(0.1))
+            except Exception:
+                pass
+            # Cancel any remaining tasks (IOCP etc.)
             try:
                 pending = asyncio.all_tasks(self._loop)
                 for task in pending:
                     task.cancel()
                 if pending:
-                    self._loop.run_until_complete(
-                        asyncio.wait(pending, timeout=0.5)
-                    )
+                    self._loop.run_until_complete(asyncio.sleep(0.1))
             except Exception:
                 pass
             try:
                 self._loop.run_until_complete(self._loop.shutdown_asyncgens())
             except Exception:
                 pass
+            # Suppress "Task was destroyed but it is pending" errors on close.
+            # These are harmless — break message was already sent successfully.
+            # websockets' shielded tasks can't be cancelled and will be GC'd.
+            _asyncio_logger = logging.getLogger("asyncio")
+            _prev_level = _asyncio_logger.level
+            _asyncio_logger.setLevel(logging.CRITICAL)
             self._loop.close()
+            _asyncio_logger.setLevel(_prev_level)
             self._loop = None
 
     async def _server_main(self):
@@ -163,6 +177,7 @@ class WSClient:
                 ping_interval=None,
                 compression=None,
                 server_header=None,
+                close_timeout=2,
             )
             try:
                 await self._stop_event.wait()
@@ -367,29 +382,49 @@ class WSClient:
 
     def disconnect(self):
         self._running = False
-        # Send close frames to all WebSocket connections BEFORE stopping loop
+        # First, reset strength to 0 so device stops output before we disconnect
+        if self._loop and self._loop.is_running() and self._app_target_id:
+            try:
+                fut = asyncio.run_coroutine_threadsafe(
+                    self._send_to_app("msg", "strength-1+2+0"), self._loop
+                )
+                fut.result(timeout=1)
+                fut = asyncio.run_coroutine_threadsafe(
+                    self._send_to_app("msg", "strength-2+2+0"), self._loop
+                )
+                fut.result(timeout=1)
+            except Exception as e:
+                logger.debug(f"归零强度异常: {e}")
+            # Send protocol-level "break" message so DG-LAB App knows we disconnected
+            try:
+                with self._lock:
+                    target = self._app_target_id
+                break_msg = _make_msg("break", client_id=self._local_client_id,
+                                      target_id=target or "", message="209")
+                # Send directly to the ws object since _send_to_app uses "msg" type
+                with self._lock:
+                    ws = self._uuid_to_ws.get(target) if target else None
+                if ws:
+                    fut = asyncio.run_coroutine_threadsafe(ws.send(break_msg), self._loop)
+                    fut.result(timeout=1)
+            except Exception as e:
+                logger.debug(f"发送break消息异常: {e}")
+        # Clear internal state
         with self._lock:
-            targets = list(self._uuid_to_ws.values())
             self._uuid_to_ws.clear()
             self._bound = False
             self._app_target_id = None
             self._app_uuid_in_bind = None
-        if self._loop and self._loop.is_running():
-            for ws in targets:
-                try:
-                    fut = asyncio.run_coroutine_threadsafe(ws.close(), self._loop)
-                    fut.result(timeout=2)
-                except Exception as e:
-                    logger.debug(f"关闭websocket异常: {e}")
-        # Signal the server to stop gracefully (this closes the ws server + socket)
-        # After _server_main finishes, run_until_complete returns and the thread exits
+        # Signal the server to stop gracefully
+        # _ws_server.close() + wait_closed() will properly close all client connections
+        # (sends close frames and waits for handshake completion)
         if self._loop and self._loop.is_running() and self._stop_event:
             try:
                 self._loop.call_soon_threadsafe(self._stop_event.set)
             except Exception:
                 pass
         if self._thread:
-            self._thread.join(timeout=3)
+            self._thread.join(timeout=5)
             if self._thread.is_alive():
                 # Thread didn't exit gracefully, force stop the loop
                 if self._loop:
