@@ -28,6 +28,7 @@ class WaveformPanel(tk.Frame):
         self._tick_id = None
         self._tick_stopped = False
         self._active = False
+        self._dirty = False  # True when new data has been pushed since last render
         self._push_pending = []  # thread-safe push buffer
         self._lock = threading.Lock()
         self._push_max_pending = 50  # cap pending buffer to prevent unbounded growth
@@ -136,10 +137,6 @@ class WaveformPanel(tk.Frame):
         self._line_b, = self._ax_b.plot([], [], color=t.get("accent_orange", "#ffb74d"),
                                         linewidth=1.5, alpha=0.9)
 
-        # Fill objects (removed - fill_between was causing memory growth)
-        self._fill_a = None
-        self._fill_b = None
-
         self._fig.tight_layout(pad=1.0)
 
         self._canvas = FigureCanvasTkAgg(self._fig, master=self)
@@ -193,11 +190,8 @@ class WaveformPanel(tk.Frame):
         with self._lock:
             pending = self._push_pending[:]
             self._push_pending.clear()
-        # Cap history to prevent unbounded growth
-        while len(self._history) > self._history.maxlen * 2:
-            trim = len(self._history) - self._history.maxlen
-            for _ in range(trim):
-                self._history.popleft()
+        if not pending:
+            return
         dt = self.SUB_INTERVAL
         for a_ints, b_ints, base_time in pending:
             max_len = max(len(a_ints), len(b_ints))
@@ -206,6 +200,7 @@ class WaveformPanel(tk.Frame):
                 a_val = a_ints[i] if i < len(a_ints) else 0
                 b_val = b_ints[i] if i < len(b_ints) else 0
                 self._history.append((ts, a_val, b_val))
+        self._dirty = True
 
     def _tick(self):
         if self._tick_stopped:
@@ -217,8 +212,9 @@ class WaveformPanel(tk.Frame):
             return
         self._flush_push()
         now = time.time()
-        if self._history:
+        if self._dirty and self._history:
             self._render(now)
+            self._dirty = False
         self._update_info(now)
         self._tick_id = self.after(100, self._tick)
 
@@ -318,16 +314,11 @@ class WaveformPanel(tk.Frame):
         with self._lock:
             self._push_pending.clear()
         self._active = False
+        self._dirty = False
         self._current_a = 0
         self._current_b = 0
         self._line_a.set_data([], [])
         self._line_b.set_data([], [])
-        if self._fill_a is not None:
-            self._fill_a.remove()
-            self._fill_a = None
-        if self._fill_b is not None:
-            self._fill_b.remove()
-            self._fill_b = None
         self._ax_a.set_xlim(0, self._visible_seconds)
         self._ax_b.set_xlim(0, self._visible_seconds)
         self._canvas.draw_idle()

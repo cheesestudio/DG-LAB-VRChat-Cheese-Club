@@ -303,72 +303,82 @@ class AvatarManager:
             loop = None
 
         if loop and loop.is_running():
-            for ch in ["A", "B"]:
-                handler = self._channels.get(ch)
-                if handler and handler.mode in ("distance", "touch"):
-                    asyncio.ensure_future(self._wave_feeder(ch))
-            asyncio.ensure_future(self._clear_checker())
-            asyncio.ensure_future(self._shock_checker())
+            asyncio.ensure_future(self._unified_tick())
         else:
             # Run in a separate thread with its own event loop
             def _run():
                 new_loop = asyncio.new_event_loop()
                 asyncio.set_event_loop(new_loop)
                 self._bg_loop = new_loop
-                for ch in ["A", "B"]:
-                    handler = self._channels.get(ch)
-                    if handler and handler.mode in ("distance", "touch"):
-                        new_loop.create_task(self._wave_feeder(ch))
-                new_loop.create_task(self._clear_checker())
-                new_loop.create_task(self._shock_checker())
+                new_loop.create_task(self._unified_tick())
                 new_loop.run_forever()
 
             t = threading.Thread(target=_run, daemon=True)
             self._bg_thread = t
             t.start()
 
-    async def _wave_feeder(self, channel: str):
-        """Background task that continuously feeds waveforms for distance/touch modes."""
-        interval = 0.05  # 50ms tick
-        logger.info(f"[Avatar] wave_feeder started for CH{channel}")
-        while self._running:
-            await asyncio.sleep(interval)
-            handler = self._channels.get(channel)
-            if not handler or handler.is_shock:
-                continue
-            wave = handler.get_wave()
-            if wave:
-                logger.info(f"[Avatar] CH{channel} sending wave: {wave[:60]}")
-                self._on_wave(channel, wave)
-
-    async def _clear_checker(self):
-        """Background task that checks for channel clears."""
-        while self._running:
-            await asyncio.sleep(0.05)
-            for ch in ["A", "B"]:
-                handler = self._channels.get(ch)
-                if handler and handler.check_clear():
-                    self._on_clear(ch)
-                    logger.info(f"Channel {ch} cleared after timeout")
-
-    async def _shock_checker(self):
-        """Background task that checks for shock mode triggers."""
-        while self._running:
-            await asyncio.sleep(0.05)
-            for ch in ["A", "B"]:
-                handler = self._channels.get(ch)
-                if handler and handler.is_shock:
-                    duration = handler.pop_shock_duration()
-                    if duration is not None:
-                        wave = handler._handler_impl.wave_data
-                        logger.info(f"[Avatar] CH{ch} sending shock wave, duration={duration}s")
+    async def _unified_tick(self):
+        """Single 50ms tick loop that handles wave feeding, clear checking, and shock checking."""
+        interval = 0.05  # 50ms
+        # Determine which channels need wave feeding
+        wave_channels = []
+        for ch in ["A", "B"]:
+            handler = self._channels.get(ch)
+            if handler and handler.mode in ("distance", "touch"):
+                wave_channels.append(ch)
+                logger.info(f"[Avatar] wave_feeder started for CH{ch}")
+        try:
+            while self._running:
+                await asyncio.sleep(interval)
+                # Wave feeding
+                for ch in wave_channels:
+                    handler = self._channels.get(ch)
+                    if not handler or handler.is_shock:
+                        continue
+                    wave = handler.get_wave()
+                    if wave:
+                        logger.info(f"[Avatar] CH{ch} sending wave: {wave[:60]}")
                         self._on_wave(ch, wave)
+                # Clear checking
+                for ch in ["A", "B"]:
+                    handler = self._channels.get(ch)
+                    if handler and handler.check_clear():
+                        self._on_clear(ch)
+                        logger.info(f"Channel {ch} cleared after timeout")
+                # Shock checking
+                for ch in ["A", "B"]:
+                    handler = self._channels.get(ch)
+                    if handler and handler.is_shock:
+                        duration = handler.pop_shock_duration()
+                        if duration is not None:
+                            wave = handler._handler_impl.wave_data
+                            logger.info(f"[Avatar] CH{ch} sending shock wave, duration={duration}s")
+                            self._on_wave(ch, wave)
+        except asyncio.CancelledError:
+            pass
 
     def stop(self):
         """Stop OSC listening and background tasks."""
         self._running = False
         self._bg_tasks_started = False
         if self._bg_loop:
+            try:
+                # Cancel all tasks in the background loop before stopping it
+                loop = self._bg_loop
+
+                async def _cancel_all():
+                    current = asyncio.current_task()
+                    tasks = [t for t in asyncio.all_tasks(loop)
+                             if t is not current and not t.done()]
+                    for t in tasks:
+                        t.cancel()
+                    if tasks:
+                        await asyncio.gather(*tasks, return_exceptions=True)
+
+                fut = asyncio.run_coroutine_threadsafe(_cancel_all(), loop)
+                fut.result(timeout=2)
+            except Exception:
+                pass
             try:
                 self._bg_loop.call_soon_threadsafe(self._bg_loop.stop)
             except Exception:

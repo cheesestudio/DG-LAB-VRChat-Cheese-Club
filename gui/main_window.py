@@ -213,6 +213,8 @@ class MainWindow:
                 except Exception:
                     pass
             self._after_ids.clear()
+            # Hide window immediately so user perceives instant close
+            self._root.withdraw()
             # Run cleanup in background (including WebSocket disconnect — slow, don't block UI)
             def _cleanup():
                 try:

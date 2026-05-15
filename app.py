@@ -89,6 +89,8 @@ class App:
         self._stats_b_intensity_time = 0.0
         self._debug_mode = False
         self._log_file = None
+        self._last_log_time = {}  # Rate-limiting for console log messages
+        self._last_log_cleanup = 0  # Last time we cleaned up _last_log_time
         self._last_http_shock_time = 0
         self._http_server = HttpServer(port=self._settings.get("http_port", 8800))
 
@@ -134,6 +136,11 @@ class App:
             done.clear()
             self._window.after(0, _read)
             done.wait(timeout=1)
+        # Fail-safe: if UI read timed out (empty result), use 0 strength
+        if not result:
+            result = {'a_limit': 0, 'b_limit': 0, 'dual_ch': False,
+                      'max_mode': False, 'mode': 'instant', 'wf_mode': 'random',
+                      'custom_wf': '', 'alternate': False}
         return result
 
     def run(self):
@@ -436,14 +443,14 @@ class App:
 
     def _waveform_feeder_thread(self, generation: int):
         import time as _time
-        import gc
-        _tick_count = 0
         _start_time = _time.time()
         _max_runtime = 60  # Hard limit: feeder must stop after 60s regardless of events
+        # Pre-decode initial waveforms to avoid repeated parsing in the loop
+        _cached_a_wave = None
+        _cached_b_wave = None
+        _cached_a_subs = None
+        _cached_b_subs = None
         while self._waveform_feeder_running and self._feeder_generation == generation:
-            _tick_count += 1
-            if _tick_count % 60 == 0:  # Every ~30 seconds, force garbage collection
-                gc.collect()
             # Ensure panel stays active while feeder is running
             try:
                 self._window.after(0, lambda: self._window.waveform_panel.set_active(True))
@@ -483,9 +490,15 @@ class App:
             self._ws_client.send_waveform("A", a_wave, duration=chunk_sec)
             self._ws_client.send_waveform("B", b_wave, duration=chunk_sec)
             # Decode hex waveform into intensity sub-frames and push to panel
+            # Use cache when waveform data hasn't changed
             try:
-                a_subs = _decode_wave_hex(a_wave)
-                b_subs = _decode_wave_hex(b_wave)
+                if a_wave != _cached_a_wave:
+                    _cached_a_wave = a_wave
+                    _cached_a_subs = _decode_wave_hex(a_wave)
+                if b_wave != _cached_b_wave:
+                    _cached_b_wave = b_wave
+                    _cached_b_subs = _decode_wave_hex(b_wave)
+                a_subs, b_subs = _cached_a_subs, _cached_b_subs
                 self._window.after(0, lambda a=a_subs, b=b_subs, t=now:
                     self._window.waveform_panel.push_waveform(a, b, t))
             except Exception:
@@ -545,12 +558,11 @@ class App:
         import time as _time
         now = _time.time()
         key = f"{tag}:{text[:50]}"
-        if not hasattr(self, '_last_log_time'):
-            self._last_log_time = {}
-        # Clean up old entries if too many
-        if len(self._last_log_time) > 100:
-            cutoff = now - 60  # Remove entries older than 60s
+        # Clean up old entries periodically (every 30s)
+        if now - self._last_log_cleanup > 30 and len(self._last_log_time) > 50:
+            cutoff = now - 60
             self._last_log_time = {k: v for k, v in self._last_log_time.items() if v > cutoff}
+            self._last_log_cleanup = now
         last_time = self._last_log_time.get(key, 0)
         if now - last_time < 0.5:  # Skip if same message within 0.5s
             return
@@ -756,7 +768,7 @@ class App:
             self._osc_server = ReusableOSCUDPServer(
                 ("127.0.0.1", avatar_port), d
             )
-            threading.Thread(target=self._osc_server.serve_forever, daemon=True).start()
+            threading.Thread(target=lambda: self._osc_server.serve_forever(poll_interval=0.1), daemon=True).start()
             self._log_to_console(f"Avatar OSC 已连接 (端口:{avatar_port})", "info")
         except Exception as e:
             self._log_to_console(f"Avatar OSC启动失败: {e}", "error")
@@ -1110,6 +1122,13 @@ class App:
             if self._log_monitor:
                 self._log_monitor.stop()
                 self._log_monitor = None
+            # Stop avatar_manager BEFORE ws_client — it feeds waveforms through ws_client
+            if self._avatar_manager:
+                try:
+                    self._avatar_manager.stop()
+                except Exception:
+                    pass
+                self._avatar_manager = None
             if self._ws_client:
                 try:
                     self._ws_client.disconnect()
@@ -1126,12 +1145,6 @@ class App:
                 except Exception:
                     pass
                 self._osc_server = None
-            if self._avatar_manager:
-                try:
-                    self._avatar_manager.stop()
-                except Exception:
-                    pass
-                self._avatar_manager = None
             try:
                 self._save_settings_from_ui()
                 self._save_session_stats()

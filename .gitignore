@@ -6,3 +6,5 @@ settings.json
 session_stats.json
 *.exe
 .omc/
+dgcode.png
+latest_session.log

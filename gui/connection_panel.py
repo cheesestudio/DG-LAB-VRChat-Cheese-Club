@@ -295,7 +295,7 @@ class ConnectionPanel(tk.Frame):
                 self._qr_canvas.delete("all")
                 self._qr_canvas.create_text(
                     self.QR_SIZE // 2, self.QR_SIZE // 2,
-                    text=str(e)[:50], fill=t.get("status_error", "#ef4444"),
+                    text=str(e)[:50], fill=self._theme.get("status_error", "#ef4444"),
                     font=(MONO_S), width=self.QR_SIZE - 20,
                 )
         if client_id:

@@ -2,8 +2,11 @@ import os
 import re
 import time
 import threading
+import logging
 from pathlib import Path
 from typing import Callable, Optional
+
+logger = logging.getLogger(__name__)
 
 
 SHOCK_PATTERN = re.compile(
@@ -33,6 +36,7 @@ class LogMonitor:
         self._current_file: Optional[Path] = None
         self._file_position: int = 0
         self._last_activity_time: float = time.time()
+        self._pending_line: Optional[str] = None
         self._running = False
         self._thread: Optional[threading.Thread] = None
         self._stop_event = threading.Event()
@@ -82,7 +86,7 @@ class LogMonitor:
                     text = data.decode("utf-8", errors="replace")
                     new_lines = text.splitlines()
                     # Stitch incomplete line from previous read
-                    if hasattr(self, '_pending_line') and self._pending_line:
+                    if self._pending_line:
                         new_lines[0] = self._pending_line + new_lines[0]
                         self._pending_line = None
                     # If data doesn't end with a line break, the last split
@@ -99,12 +103,7 @@ class LogMonitor:
         # Quick check: only process lines that might be relevant
         if "[DGLABCheeseShocking]" not in line and "[ShockingManager]" not in line and "ShockingPlayer" not in line:
             return
-        # Debug: log that we found a relevant line to file
-        try:
-            with open("log_monitor_debug.log", "a", encoding="utf-8") as f:
-                f.write(f"[DEBUG] Relevant line: {line[:80]}\n")
-        except:
-            pass
+        logger.debug(f"Relevant line: {line[:80]}")
         self._on_log_line(line)
         match = SHOCK_PATTERN.search(line)
         if match:

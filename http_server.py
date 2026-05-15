@@ -46,6 +46,17 @@ class ShockHandler(BaseHTTPRequestHandler):
             self._handle_status()
         elif params.get("ret") == ["status"]:
             self._handle_status()
+        elif path.startswith("/api/v1/shock"):
+            # /api/v1/shock?channel=A&second=5
+            channel = params.get("channel", ["all"])[0]
+            second_str = params.get("second", ["1"])[0]
+            self._handle_shock(channel, second_str)
+        elif path.startswith("/api/v1/sendwave"):
+            # /api/v1/sendwave?channel=A&repeat=10&wavedata=...
+            channel = params.get("channel", ["A"])[0]
+            repeat_str = params.get("repeat", ["1"])[0]
+            wavedata = params.get("wavedata", [""])[0]
+            self._handle_sendwave(channel, repeat_str, wavedata)
         else:
             self._handle_status()
 

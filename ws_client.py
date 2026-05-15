@@ -83,21 +83,57 @@ class WSClient:
         self._strength_max = {"A": 200, "B": 200}
         self._waveform_active = False  # Suppress reactive strength correction during waveform playback
         self._server_socket = None
+        self._ws_server = None
+        self._stop_event: Optional[asyncio.Event] = None
         self._init_task: Optional[asyncio.Task] = None  # track init strength task for cancellation
 
     def _run_server(self):
         self._loop = asyncio.new_event_loop()
         asyncio.set_event_loop(self._loop)
+
+        # Suppress Windows IOCP errors (OSError 995) during shutdown
+        _default_handler = self._loop.get_exception_handler()
+
+        def _shutdown_exception_handler(loop, context):
+            exc = context.get("exception")
+            if isinstance(exc, OSError) and getattr(exc, "winerror", None) == 995:
+                return  # Suppress IOCP abort during shutdown
+            if _default_handler:
+                _default_handler(loop, context)
+            else:
+                loop.default_exception_handler(context)
+
+        self._loop.set_exception_handler(_shutdown_exception_handler)
+
         try:
             self._loop.run_until_complete(self._server_main())
+        except RuntimeError as e:
+            # "Event loop stopped before Future completed" is expected during shutdown
+            if "Event loop stopped" not in str(e):
+                logger.error(f"服务器线程异常: {e}")
         finally:
-            # Close all remaining tasks
-            for task in asyncio.all_tasks(self._loop):
-                task.cancel()
+            # Cancel all remaining tasks with a short timeout
+            # On Windows, IOCP tasks may take seconds to cancel — don't wait forever
+            try:
+                pending = asyncio.all_tasks(self._loop)
+                for task in pending:
+                    task.cancel()
+                if pending:
+                    self._loop.run_until_complete(
+                        asyncio.wait(pending, timeout=0.5)
+                    )
+            except Exception:
+                pass
+            try:
+                self._loop.run_until_complete(self._loop.shutdown_asyncgens())
+            except Exception:
+                pass
             self._loop.close()
             self._loop = None
 
     async def _server_main(self):
+        self._stop_event = asyncio.Event()
+
         async def handler(ws):
             await self._handle_client(ws)
 
@@ -122,13 +158,26 @@ class WSClient:
             self._on_message({"type": "info", "text": f"服务器已启动: {local_ip}:{self._port}"})
             self._on_message({"type": "info", "text": f"终端ID: {self._local_client_id[:16]}.."})
 
-            async with websockets.serve(
+            self._ws_server = await websockets.serve(
                 handler, sock=sock,
                 ping_interval=None,
                 compression=None,
                 server_header=None,
-            ):
-                await asyncio.Future()
+            )
+            try:
+                await self._stop_event.wait()
+            finally:
+                self._ws_server.close()
+                await self._ws_server.wait_closed()
+        except asyncio.CancelledError:
+            pass
+        except OSError as e:
+            # WinError 995: I/O operation aborted during shutdown - expected
+            if e.winerror == 995:
+                pass
+            else:
+                self._on_message({"type": "error", "text": f"服务器启动失败: {e}"})
+                self._on_status("disconnected")
         except Exception as e:
             self._on_message({"type": "error", "text": f"服务器启动失败: {e}"})
             self._on_status("disconnected")
@@ -231,6 +280,8 @@ class WSClient:
                 else:
                     self._on_message({"type": "debug", "text": f"未知消息类型: {msg_type} data={str(msg_data)[:80]}"})
 
+        except asyncio.CancelledError:
+            pass
         except Exception as e:
             self._on_message({"type": "warning", "text": f"连接异常: {e}"})
         finally:
@@ -316,13 +367,6 @@ class WSClient:
 
     def disconnect(self):
         self._running = False
-        # Close the server socket to release the port immediately
-        if self._server_socket:
-            try:
-                self._server_socket.close()
-            except Exception as e:
-                logger.debug(f"关闭server socket异常: {e}")
-            self._server_socket = None
         # Send close frames to all WebSocket connections BEFORE stopping loop
         with self._lock:
             targets = list(self._uuid_to_ws.values())
@@ -337,15 +381,25 @@ class WSClient:
                     fut.result(timeout=2)
                 except Exception as e:
                     logger.debug(f"关闭websocket异常: {e}")
-        # Stop the event loop
-        if self._loop:
+        # Signal the server to stop gracefully (this closes the ws server + socket)
+        # After _server_main finishes, run_until_complete returns and the thread exits
+        if self._loop and self._loop.is_running() and self._stop_event:
             try:
-                self._loop.call_soon_threadsafe(self._loop.stop)
+                self._loop.call_soon_threadsafe(self._stop_event.set)
             except Exception:
                 pass
         if self._thread:
-            self._thread.join(timeout=2)
+            self._thread.join(timeout=3)
+            if self._thread.is_alive():
+                # Thread didn't exit gracefully, force stop the loop
+                if self._loop:
+                    try:
+                        self._loop.call_soon_threadsafe(self._loop.stop)
+                    except Exception:
+                        pass
+                    self._thread.join(timeout=1)
             self._thread = None
+        self._server_socket = None
         self._on_status("disconnected")
 
     @property
@@ -363,9 +417,12 @@ class WSClient:
         ch_num = "1" if channel.upper() == "A" else "2"
         value = max(0, min(200, value))
         if self._loop and self._loop.is_running():
-            asyncio.run_coroutine_threadsafe(
-                self._send_to_app("msg", f"strength-{ch_num}+2+{value}"), self._loop
-            )
+            try:
+                asyncio.run_coroutine_threadsafe(
+                    self._send_to_app("msg", f"strength-{ch_num}+2+{value}"), self._loop
+                )
+            except RuntimeError:
+                pass
 
     def force_strength(self, a_limit: int, b_limit: int):
         """Immediately force both channels to their limits."""
@@ -376,19 +433,21 @@ class WSClient:
             a_val = min(a_limit, self._strength_max.get("A", 200))
             b_val = min(b_limit, self._strength_max.get("B", 200))
         if self._loop and self._loop.is_running():
-            asyncio.run_coroutine_threadsafe(
-                self._send_to_app("msg", f"strength-1+2+{a_val}"), self._loop
-            )
-            asyncio.run_coroutine_threadsafe(
-                self._send_to_app("msg", f"strength-2+2+{b_val}"), self._loop
-            )
+            try:
+                asyncio.run_coroutine_threadsafe(
+                    self._send_to_app("msg", f"strength-1+2+{a_val}"), self._loop
+                )
+                asyncio.run_coroutine_threadsafe(
+                    self._send_to_app("msg", f"strength-2+2+{b_val}"), self._loop
+                )
+            except RuntimeError:
+                pass
 
     def send_waveform(self, channel: str, hex_data, duration: int = 5):
         """Send waveform data to device. No clear needed - device replaces queue automatically."""
         if not self.is_paired:
             self._on_message({"type": "warning", "text": f"send_waveform 跳过: 未配对"})
             return
-        self._waveform_active = True
         if isinstance(hex_data, list):
             pass  # already a list
         elif isinstance(hex_data, str):
@@ -403,6 +462,7 @@ class WSClient:
         if not isinstance(hex_data, list) or not hex_data:
             self._on_message({"type": "warning", "text": f"send_waveform 跳过: 数据为空 type={type(hex_data)}"})
             return
+        self._waveform_active = True
         ch_name = channel.upper()  # pulse uses letters: A, B
         # pydglab_ws limit: max 86 entries per message, max 1950 chars
         CHUNK_SIZE = 86
