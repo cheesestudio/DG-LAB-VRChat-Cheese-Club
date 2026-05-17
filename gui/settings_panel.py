@@ -1,473 +1,452 @@
-from gui.fonts import UI_XS, UI_S, UI_S_B, UI_M, UI_M_B, UI_L, MONO_S, MONO_M_B
-import tkinter as tk
+import customtkinter as ctk
+from tkinter import StringVar, IntVar, BooleanVar
 from waveform_library import get_names
 
 
-class SettingsPanel(tk.Frame):
-    def __init__(self, master, theme: dict = None, on_settings_change=None, on_theme_toggle=None, on_test_shock=None, **kwargs):
-        self._theme = theme or {}
-        super().__init__(master, bg=self._theme.get("bg_panel", "#111827"), **kwargs)
+class SettingsPanel(ctk.CTkScrollableFrame):
+    """电击设置面板 - CustomTkinter 重写版"""
+
+    # 配色常量
+    _BG_PANEL = "#1a1a1a"
+    _BG_CARD = "#242424"
+    _BG_INPUT = "#161616"
+    _BORDER = "#333333"
+    _TEXT_PRIMARY = "#e4e4e7"
+    _TEXT_SECONDARY = "#a1a1aa"
+    _TEXT_DIM = "#71717a"
+    _ACCENT = "#d4a054"
+    _CH_A = "#34d399"
+    _CH_B = "#fbbf24"
+    _SUCCESS = "#22c55e"
+    _DANGER = "#ef4444"
+    _WARNING = "#f59e0b"
+
+    def __init__(self, master, theme=None, on_settings_change=None, on_test_shock=None, **kwargs):
+        super().__init__(
+            master,
+            fg_color=self._BG_PANEL,
+            scrollbar_button_color=self._BORDER,
+            scrollbar_button_hover_color=self._ACCENT,
+            **kwargs,
+        )
         self._on_change = on_settings_change or (lambda: None)
-        self._on_theme_toggle = on_theme_toggle or (lambda: None)
         self._on_test_shock = on_test_shock or (lambda: None)
+        self._chatbox_enabled_callback = None
         self._build()
 
+    # ─── UI 构建 ───────────────────────────────────────────────────────
+
+    def _make_group(self, parent=None) -> ctk.CTkFrame:
+        """创建一个分组卡片"""
+        frame = ctk.CTkFrame(
+            parent or self,
+            fg_color=self._BG_CARD,
+            corner_radius=8,
+            border_width=1,
+            border_color=self._BORDER,
+        )
+        frame.pack(fill="x", pady=8)
+        return frame
+
     def _build(self):
-        t = self._theme
+        # ── 电击设置组 ──
+        main_group = self._make_group()
 
-        # Main container
-        container = tk.Frame(self, bg=t.get("bg_card", "#151d2b"),
-                            highlightbackground=t.get("border_color", "#1e293b"),
-                            highlightthickness=1)
-        container.pack(fill="x", padx=4, pady=4)
+        # 标题
+        ctk.CTkLabel(
+            main_group, text="电击设置",
+            text_color=self._TEXT_PRIMARY,
+            font=ctk.CTkFont(size=16, weight="bold"),
+        ).pack(anchor="w", padx=16, pady=(12, 8))
 
-        # Header
-        header = tk.Frame(container, bg=t.get("bg_card", "#151d2b"))
-        header.pack(fill="x", padx=12, pady=(12, 8))
+        # ── A 通道上限 ──
+        self._build_limit_slider(main_group, "A上限", self._CH_A, is_a=True)
 
-        tk.Label(
-            header, text="电击设置",
-            bg=t.get("bg_card", "#151d2b"),
-            fg=t.get("text_primary", "#f1f5f9"),
-            font=(UI_M_B), anchor="w",
+        # ── B 通道上限 ──
+        self._build_limit_slider(main_group, "B上限", self._CH_B, is_a=False)
+
+        # ── 当前强度 ──
+        strength_row = ctk.CTkFrame(main_group, fg_color="transparent")
+        strength_row.pack(fill="x", padx=16, pady=(0, 12))
+
+        ctk.CTkLabel(
+            strength_row, text="当前强度",
+            text_color=self._TEXT_DIM, font=ctk.CTkFont(size=12),
         ).pack(side="left")
 
-        self._theme_btn = tk.Button(
-            header, text="主题",
-            bg=t.get("bg_button", "#2563eb"),
-            fg="#ffffff",
-            activebackground=t.get("bg_button_hover", "#3b82f6"),
-            font=(UI_XS), relief="flat", cursor="hand2",
-            command=self._on_theme_toggle, width=6,
-        )
-        self._theme_btn.pack(side="right")
-
-        # Channel A limit
-        a_frame = tk.Frame(container, bg=t.get("bg_card", "#151d2b"))
-        a_frame.pack(fill="x", padx=12, pady=(0, 8))
-
-        tk.Label(
-            a_frame, text="A上限",
-            bg=t.get("bg_card", "#151d2b"),
-            fg=t.get("accent_emerald", "#34d399"),
-            font=(UI_S_B),
-        ).pack(side="left")
-
-        self._a_limit_var = tk.IntVar(value=200)
-        self._a_limit_label = tk.Label(
-            a_frame, text="200",
-            bg=t.get("bg_card", "#151d2b"),
-            fg=t.get("accent_emerald", "#34d399"),
-            font=(MONO_M_B), width=4,
-        )
-        self._a_limit_label.pack(side="right")
-
-        self._a_limit_scale = tk.Scale(
-            a_frame, from_=0, to=200, orient="horizontal",
-            variable=self._a_limit_var, command=self._on_a_limit_change,
-            bg=t.get("bg_card", "#151d2b"),
-            fg=t.get("text_secondary", "#94a3b8"),
-            troughcolor=t.get("bg_slider_trough", "#1e293b"),
-            highlightthickness=0, sliderrelief="flat", length=180,
-        )
-        self._a_limit_scale.pack(side="right", padx=(8, 8))
-
-        # Channel B limit
-        b_frame = tk.Frame(container, bg=t.get("bg_card", "#151d2b"))
-        b_frame.pack(fill="x", padx=12, pady=(0, 8))
-
-        tk.Label(
-            b_frame, text="B上限",
-            bg=t.get("bg_card", "#151d2b"),
-            fg=t.get("accent_amber", "#fbbf24"),
-            font=(UI_S_B),
-        ).pack(side="left")
-
-        self._b_limit_var = tk.IntVar(value=200)
-        self._b_limit_label = tk.Label(
-            b_frame, text="200",
-            bg=t.get("bg_card", "#151d2b"),
-            fg=t.get("accent_amber", "#fbbf24"),
-            font=(MONO_M_B), width=4,
-        )
-        self._b_limit_label.pack(side="right")
-
-        self._b_limit_scale = tk.Scale(
-            b_frame, from_=0, to=200, orient="horizontal",
-            variable=self._b_limit_var, command=self._on_b_limit_change,
-            bg=t.get("bg_card", "#151d2b"),
-            fg=t.get("text_secondary", "#94a3b8"),
-            troughcolor=t.get("bg_slider_trough", "#1e293b"),
-            highlightthickness=0, sliderrelief="flat", length=180,
-        )
-        self._b_limit_scale.pack(side="right", padx=(8, 8))
-
-        # Current strength display
-        strength_frame = tk.Frame(container, bg=t.get("bg_card", "#151d2b"))
-        strength_frame.pack(fill="x", padx=12, pady=(0, 12))
-
-        tk.Label(
-            strength_frame, text="当前强度",
-            bg=t.get("bg_card", "#151d2b"),
-            fg=t.get("text_dim", "#64748b"),
-            font=(UI_XS),
-        ).pack(side="left")
-
-        self._a_label = tk.Label(
-            strength_frame, text="A: 0",
-            bg=t.get("bg_card", "#151d2b"),
-            fg=t.get("accent_emerald", "#34d399"),
-            font=(MONO_S),
+        self._a_label = ctk.CTkLabel(
+            strength_row, text="A: 0",
+            text_color=self._CH_A, font=ctk.CTkFont(family="Consolas", size=12),
         )
         self._a_label.pack(side="left", padx=(8, 16))
 
-        self._b_label = tk.Label(
-            strength_frame, text="B: 0",
-            bg=t.get("bg_card", "#151d2b"),
-            fg=t.get("accent_amber", "#fbbf24"),
-            font=(MONO_S),
+        self._b_label = ctk.CTkLabel(
+            strength_row, text="B: 0",
+            text_color=self._CH_B, font=ctk.CTkFont(family="Consolas", size=12),
         )
         self._b_label.pack(side="left")
 
-        # Mode selection
-        mode_frame = tk.Frame(container, bg=t.get("bg_card", "#151d2b"))
-        mode_frame.pack(fill="x", padx=12, pady=(0, 12))
+        # ── 模式选择 ──
+        mode_row = ctk.CTkFrame(main_group, fg_color="transparent")
+        mode_row.pack(fill="x", padx=16, pady=(0, 12))
 
-        tk.Label(
-            mode_frame, text="模式",
-            bg=t.get("bg_card", "#151d2b"),
-            fg=t.get("text_dim", "#64748b"),
-            font=(UI_XS),
-        ).pack(side="left")
+        ctk.CTkLabel(
+            mode_row, text="模式",
+            text_color=self._TEXT_DIM, font=ctk.CTkFont(size=12),
+        ).pack(side="left", padx=(0, 8))
 
-        self._mode_var = tk.StringVar(value="instant")
-        modes = [
-            ("一键开火", "instant"),
-            ("温柔加力", "gradual"),
-            ("拉满", "max"),
-        ]
+        self._mode_var = StringVar(value="一键开火")
+        self._MODE_TO_LABEL = {"instant": "一键开火", "gradual": "温柔加力", "max": "拉满"}
+        self._LABEL_TO_MODE = {"一键开火": "instant", "温柔加力": "gradual", "拉满": "max"}
+        self._mode_seg = ctk.CTkSegmentedButton(
+            mode_row,
+            values=["一键开火", "温柔加力", "拉满"],
+            variable=self._mode_var,
+            command=self._on_mode_change,
+            font=ctk.CTkFont(size=12),
+            fg_color=self._BG_INPUT,
+            selected_color=self._ACCENT,
+            selected_hover_color="#9c7232",
+            unselected_color=self._BG_INPUT,
+            unselected_hover_color=self._BORDER,
+            text_color=self._TEXT_PRIMARY,
+        )
+        self._mode_seg.pack(side="left", fill="x", expand=True)
 
-        for text, value in modes:
-            rb = tk.Radiobutton(
-                mode_frame, text=text, variable=self._mode_var, value=value,
-                bg=t.get("bg_card", "#151d2b"),
-                fg=t.get("text_secondary", "#94a3b8"),
-                selectcolor=t.get("bg_input", "#0f1520"),
-                activebackground=t.get("bg_card", "#151d2b"),
-                activeforeground=t.get("text_primary", "#f1f5f9"),
-                font=(UI_S), relief="flat",
-                command=self._on_change,
-            )
-            rb.pack(side="left", padx=(8, 0))
+        # ── 波形模式 ──
+        wf_row = ctk.CTkFrame(main_group, fg_color="transparent")
+        wf_row.pack(fill="x", padx=16, pady=(0, 12))
 
-        # Waveform mode
-        wf_frame = tk.Frame(container, bg=t.get("bg_card", "#151d2b"))
-        wf_frame.pack(fill="x", padx=12, pady=(0, 12))
+        ctk.CTkLabel(
+            wf_row, text="波形",
+            text_color=self._TEXT_DIM, font=ctk.CTkFont(size=12),
+        ).pack(side="left", padx=(0, 8))
 
-        tk.Label(
-            wf_frame, text="波形",
-            bg=t.get("bg_card", "#151d2b"),
-            fg=t.get("text_dim", "#64748b"),
-            font=(UI_XS),
-        ).pack(side="left")
+        self._wf_var = StringVar(value="波形库")
+        self._WF_TO_LABEL = {"library": "波形库", "custom": "自定义"}
+        self._WF_LABEL_TO_MODE = {"波形库": "library", "自定义": "custom"}
+        self._wf_seg = ctk.CTkSegmentedButton(
+            wf_row,
+            values=["波形库", "自定义"],
+            variable=self._wf_var,
+            command=self._on_wf_mode_change,
+            font=ctk.CTkFont(size=12),
+            fg_color=self._BG_INPUT,
+            selected_color=self._ACCENT,
+            selected_hover_color="#9c7232",
+            unselected_color=self._BG_INPUT,
+            unselected_hover_color=self._BORDER,
+            text_color=self._TEXT_PRIMARY,
+        )
+        self._wf_seg.pack(side="left", fill="x", expand=True)
 
-        self._wf_var = tk.StringVar(value="library")
-        wf_modes = [
-            ("波形库", "library"),
-            ("自定义", "custom"),
-        ]
-
-        for text, value in wf_modes:
-            rb = tk.Radiobutton(
-                wf_frame, text=text, variable=self._wf_var, value=value,
-                bg=t.get("bg_card", "#151d2b"),
-                fg=t.get("text_secondary", "#94a3b8"),
-                selectcolor=t.get("bg_input", "#0f1520"),
-                activebackground=t.get("bg_card", "#151d2b"),
-                activeforeground=t.get("text_primary", "#f1f5f9"),
-                font=(UI_S), relief="flat",
-                command=self._on_wf_mode_change,
-            )
-            rb.pack(side="left", padx=(8, 0))
-
-        # Custom waveform preset dropdown (hidden by default)
+        # ── 波形库选择（默认隐藏） ──
         self._wf_names = get_names()
-        self._custom_wf_group = tk.Frame(container, bg=t.get("bg_card", "#151d2b"))
+        self._custom_wf_frame = ctk.CTkFrame(main_group, fg_color="transparent")
 
-        tk.Label(
-            self._custom_wf_group, text="选择波形",
-            bg=t.get("bg_card", "#151d2b"),
-            fg=t.get("text_dim", "#64748b"),
-            font=(UI_XS),
+        ctk.CTkLabel(
+            self._custom_wf_frame, text="选择波形",
+            text_color=self._TEXT_DIM, font=ctk.CTkFont(size=12),
         ).pack(anchor="w")
 
-        self._custom_wf_var = tk.StringVar(value=self._wf_names[0] if self._wf_names else "")
-        self._custom_wf_menu = tk.OptionMenu(
-            self._custom_wf_group, self._custom_wf_var, *self._wf_names,
-        )
-        self._custom_wf_menu.configure(
-            bg=t.get("bg_input", "#0f1520"),
-            fg=t.get("text_primary", "#f1f5f9"),
-            activebackground=t.get("bg_button_hover", "#3b82f6"),
-            activeforeground=t.get("text_primary", "#f1f5f9"),
-            highlightthickness=0, relief="flat",
-            font=(UI_XS),
-        )
-        self._custom_wf_menu["menu"].configure(
-            bg=t.get("bg_input", "#0f1520"),
-            fg=t.get("text_primary", "#f1f5f9"),
-            activebackground=t.get("bg_button_hover", "#3b82f6"),
-            font=(UI_XS),
+        self._custom_wf_var = StringVar(value=self._wf_names[0] if self._wf_names else "")
+        self._custom_wf_menu = ctk.CTkOptionMenu(
+            self._custom_wf_frame,
+            values=self._wf_names if self._wf_names else [""],
+            variable=self._custom_wf_var,
+            command=lambda _: self._on_change(),
+            fg_color=self._BG_INPUT,
+            button_color=self._BORDER,
+            button_hover_color=self._ACCENT,
+            dropdown_fg_color=self._BG_INPUT,
+            dropdown_hover_color=self._ACCENT,
+            text_color=self._TEXT_PRIMARY,
+            font=ctk.CTkFont(size=12),
+            corner_radius=6,
         )
         self._custom_wf_menu.pack(fill="x", pady=(4, 0))
         self._update_custom_wf_visibility()
 
-        # Channel selection
-        ch_frame = tk.Frame(container, bg=t.get("bg_card", "#151d2b"))
-        ch_frame.pack(fill="x", padx=12, pady=(0, 12))
+        # ── 通道选择 ──
+        ch_row = ctk.CTkFrame(main_group, fg_color="transparent")
+        ch_row.pack(fill="x", padx=16, pady=(0, 12))
 
-        tk.Label(
-            ch_frame, text="通道",
-            bg=t.get("bg_card", "#151d2b"),
-            fg=t.get("text_dim", "#64748b"),
-            font=(UI_XS),
-        ).pack(side="left")
+        ctk.CTkLabel(
+            ch_row, text="通道",
+            text_color=self._TEXT_DIM, font=ctk.CTkFont(size=12),
+        ).pack(side="left", padx=(0, 8))
 
-        self._channel_var = tk.StringVar(value="A")
-        channels = [("A", "A"), ("B", "B")]
-        self._channel_rbs = []
+        self._channel_var = StringVar(value="A")
+        self._channel_seg = ctk.CTkSegmentedButton(
+            ch_row,
+            values=["A", "B"],
+            variable=self._channel_var,
+            command=self._on_channel_change,
+            font=ctk.CTkFont(size=12),
+            fg_color=self._BG_INPUT,
+            selected_color=self._ACCENT,
+            selected_hover_color="#9c7232",
+            unselected_color=self._BG_INPUT,
+            unselected_hover_color=self._BORDER,
+            text_color=self._TEXT_PRIMARY,
+            dynamic_resizing=False,
+        )
+        self._channel_seg.pack(side="left")
 
-        for text, value in channels:
-            rb = tk.Radiobutton(
-                ch_frame, text=text, variable=self._channel_var, value=value,
-                bg=t.get("bg_card", "#151d2b"),
-                fg=t.get("text_secondary", "#94a3b8"),
-                selectcolor=t.get("bg_input", "#0f1520"),
-                activebackground=t.get("bg_card", "#151d2b"),
-                activeforeground=t.get("text_primary", "#f1f5f9"),
-                font=(UI_S), relief="flat",
-                command=self._on_change,
-            )
-            rb.pack(side="left", padx=(8, 0))
-            self._channel_rbs.append(rb)
-
-        self._dual_var = tk.BooleanVar(value=False)
-        self._dual_check = tk.Checkbutton(
-            ch_frame, text="双通道", variable=self._dual_var,
-            bg=t.get("bg_card", "#151d2b"),
-            fg=t.get("text_secondary", "#94a3b8"),
-            selectcolor=t.get("bg_input", "#0f1520"),
-            activebackground=t.get("bg_card", "#151d2b"),
-            activeforeground=t.get("text_primary", "#f1f5f9"),
-            font=(UI_S), relief="flat",
+        self._dual_var = BooleanVar(value=False)
+        self._dual_switch = ctk.CTkSwitch(
+            ch_row, text="双通道",
+            variable=self._dual_var,
             command=self._on_dual_toggle,
+            font=ctk.CTkFont(size=12),
+            text_color=self._TEXT_SECONDARY,
+            progress_color=self._ACCENT,
+            button_color=self._TEXT_DIM,
+            button_hover_color=self._TEXT_SECONDARY,
+            fg_color=self._BORDER,
         )
-        self._dual_check.pack(side="left", padx=(16, 0))
+        self._dual_switch.pack(side="left", padx=(16, 0))
 
-        self._alternate_var = tk.BooleanVar(value=False)
-        self._alternate_check = tk.Checkbutton(
-            ch_frame, text="波形交替", variable=self._alternate_var,
-            bg=t.get("bg_card", "#151d2b"),
-            fg=t.get("text_secondary", "#94a3b8"),
-            selectcolor=t.get("bg_input", "#0f1520"),
-            activebackground=t.get("bg_card", "#151d2b"),
-            activeforeground=t.get("text_primary", "#f1f5f9"),
-            font=(UI_S), relief="flat",
-            command=self._on_change,
+        self._alternate_var = BooleanVar(value=False)
+        self._alternate_switch = ctk.CTkSwitch(
+            ch_row, text="波形交替",
+            variable=self._alternate_var,
+            command=lambda: self._on_change(),
+            font=ctk.CTkFont(size=12),
+            text_color=self._TEXT_SECONDARY,
+            progress_color=self._ACCENT,
+            button_color=self._TEXT_DIM,
+            button_hover_color=self._TEXT_SECONDARY,
+            fg_color=self._BORDER,
         )
-        self._alternate_check.pack(side="left", padx=(16, 0))
+        self._alternate_switch.pack(side="left", padx=(16, 0))
 
-        # Test shock button
-        btn_frame = tk.Frame(container, bg=t.get("bg_card", "#151d2b"))
-        btn_frame.pack(fill="x", padx=12, pady=(0, 12))
-
-        self._test_btn = tk.Button(
-            btn_frame, text="测试电击 (3秒双通道)",
-            bg=t.get("bg_button", "#2563eb"),
-            fg="#ffffff",
-            activebackground=t.get("bg_button_hover", "#3b82f6"),
-            font=(UI_S_B), relief="flat", cursor="hand2",
-            command=self._on_test_shock, height=1,
+        # ── 测试电击按钮 ──
+        self._test_btn = ctk.CTkButton(
+            main_group, text="测试电击 (3秒双通道)",
+            command=self._on_test_shock,
+            font=ctk.CTkFont(size=13, weight="bold"),
+            fg_color=self._ACCENT,
+            hover_color="#9c7232",
+            text_color="#ffffff",
+            corner_radius=6,
+            height=36,
         )
-        self._test_btn.pack(fill="x")
+        self._test_btn.pack(fill="x", padx=16, pady=(0, 12))
 
-        # Chatbox customization
-        chatbox_frame = tk.Frame(container, bg=t.get("bg_card", "#151d2b"))
-        chatbox_frame.pack(fill="x", padx=12, pady=(0, 12))
+        # ── Chatbox 设置组 ──
+        chatbox_group = self._make_group()
 
-        tk.Label(
-            chatbox_frame, text="Chatbox自定义",
-            bg=t.get("bg_card", "#151d2b"),
-            fg=t.get("text_dim", "#64748b"),
-            font=(UI_XS),
-        ).pack(anchor="w")
+        ctk.CTkLabel(
+            chatbox_group, text="Chatbox 设置",
+            text_color=self._TEXT_PRIMARY,
+            font=ctk.CTkFont(size=16, weight="bold"),
+        ).pack(anchor="w", padx=16, pady=(12, 8))
 
-        self._chatbox_entry = tk.Entry(
-            chatbox_frame,
-            bg=t.get("bg_input", "#0f1520"),
-            fg=t.get("text_primary", "#f1f5f9"),
-            insertbackground=t.get("text_primary", "#f1f5f9"),
-            font=(UI_S), relief="flat",
-            highlightbackground=t.get("border_color", "#1e293b"),
-            highlightthickness=1,
+        # Chatbox 自定义文本
+        ctk.CTkLabel(
+            chatbox_group, text="Chatbox自定义",
+            text_color=self._TEXT_DIM, font=ctk.CTkFont(size=12),
+        ).pack(anchor="w", padx=16)
+
+        self._chatbox_entry = ctk.CTkEntry(
+            chatbox_group,
+            fg_color=self._BG_INPUT,
+            border_color=self._BORDER,
+            text_color=self._TEXT_PRIMARY,
+            font=ctk.CTkFont(size=12),
+            corner_radius=6,
         )
-        self._chatbox_entry.pack(fill="x", pady=(4, 0))
+        self._chatbox_entry.pack(fill="x", padx=16, pady=(4, 12))
 
-        # Chatbox line toggles
-        lines_frame = tk.Frame(container, bg=t.get("bg_card", "#151d2b"))
-        lines_frame.pack(fill="x", padx=12, pady=(0, 12))
+        # Chatbox 显示行开关
+        ctk.CTkLabel(
+            chatbox_group, text="Chatbox显示行",
+            text_color=self._TEXT_DIM, font=ctk.CTkFont(size=12),
+        ).pack(anchor="w", padx=16)
 
-        tk.Label(
-            lines_frame, text="Chatbox显示行",
-            bg=t.get("bg_card", "#151d2b"),
-            fg=t.get("text_dim", "#64748b"),
-            font=(UI_XS),
-        ).pack(anchor="w")
-
-        toggles_frame = tk.Frame(lines_frame, bg=t.get("bg_card", "#151d2b"))
-        toggles_frame.pack(fill="x", pady=(4, 0))
+        toggles_row = ctk.CTkFrame(chatbox_group, fg_color="transparent")
+        toggles_row.pack(fill="x", padx=16, pady=(4, 12))
 
         self._chatbox_toggles = {}
         toggle_labels = ["全部", "标题行", "强度行", "剩余秒数", "波形名", "自定义"]
         for label in toggle_labels:
-            var = tk.BooleanVar(value=(label == "全部"))
-            cb = tk.Checkbutton(
-                toggles_frame, text=label, variable=var,
-                bg=t.get("bg_card", "#151d2b"),
-                fg=t.get("text_secondary", "#94a3b8"),
-                selectcolor=t.get("bg_input", "#0f1520"),
-                activebackground=t.get("bg_card", "#151d2b"),
-                activeforeground=t.get("text_primary", "#f1f5f9"),
-                font=(UI_XS), relief="flat",
+            var = BooleanVar(value=(label == "全部"))
+            sw = ctk.CTkSwitch(
+                toggles_row, text=label,
+                variable=var,
                 command=self._on_change,
+                font=ctk.CTkFont(size=11),
+                text_color=self._TEXT_SECONDARY,
+                progress_color=self._ACCENT,
+                button_color=self._TEXT_DIM,
+                button_hover_color=self._TEXT_SECONDARY,
+                fg_color=self._BORDER,
+                width=40,
             )
-            cb.pack(side="left", padx=(0, 8))
+            sw.pack(side="left", padx=(0, 12))
             self._chatbox_toggles[label] = var
 
-        # Statistics
-        stats_frame = tk.Frame(container, bg=t.get("bg_card", "#151d2b"))
-        stats_frame.pack(fill="x", padx=12, pady=(0, 12))
+        # ── 统计组 ──
+        stats_group = self._make_group()
 
-        tk.Label(
-            stats_frame, text="电击统计",
-            bg=t.get("bg_card", "#151d2b"),
-            fg=t.get("text_dim", "#64748b"),
-            font=(UI_XS),
-        ).pack(anchor="w")
+        ctk.CTkLabel(
+            stats_group, text="电击统计",
+            text_color=self._TEXT_PRIMARY,
+            font=ctk.CTkFont(size=16, weight="bold"),
+        ).pack(anchor="w", padx=16, pady=(12, 8))
 
-        self._stats_a_label = tk.Label(
-            stats_frame, text="A: 0秒 | 强度x时间: 0",
-            bg=t.get("bg_card", "#151d2b"),
-            fg=t.get("accent_emerald", "#34d399"),
-            font=(MONO_S),
+        self._stats_a_label = ctk.CTkLabel(
+            stats_group, text="A: 0秒 | 强度x时间: 0",
+            text_color=self._CH_A,
+            font=ctk.CTkFont(family="Consolas", size=12),
         )
-        self._stats_a_label.pack(anchor="w", pady=(4, 0))
+        self._stats_a_label.pack(anchor="w", padx=16, pady=(0, 4))
 
-        self._stats_b_label = tk.Label(
-            stats_frame, text="B: 0秒 | 强度x时间: 0",
-            bg=t.get("bg_card", "#151d2b"),
-            fg=t.get("accent_amber", "#fbbf24"),
-            font=(MONO_S),
+        self._stats_b_label = ctk.CTkLabel(
+            stats_group, text="B: 0秒 | 强度x时间: 0",
+            text_color=self._CH_B,
+            font=ctk.CTkFont(family="Consolas", size=12),
         )
-        self._stats_b_label.pack(anchor="w")
+        self._stats_b_label.pack(anchor="w", padx=16, pady=(0, 12))
 
-        # 安全模式
-        safety_container = tk.Frame(self, bg=t.get("bg_card", "#151d2b"),
-                                    highlightbackground=t.get("border_color", "#1e293b"),
-                                    highlightthickness=1)
-        safety_container.pack(fill="x", padx=4, pady=(8, 4))
-        self._safety_container = safety_container
+        # ── 安全模式组 ──
+        safety_group = self._make_group()
 
-        # 标题
-        safety_header = tk.Frame(safety_container, bg=t.get("bg_card", "#151d2b"))
-        safety_header.pack(fill="x", padx=12, pady=(12, 8))
+        safety_header = ctk.CTkFrame(safety_group, fg_color="transparent")
+        safety_header.pack(fill="x", padx=16, pady=(12, 4))
 
-        tk.Label(
+        ctk.CTkLabel(
             safety_header, text="安全模式",
-            bg=t.get("bg_card", "#151d2b"),
-            fg=t.get("text_primary", "#f1f5f9"),
-            font=(UI_M_B), anchor="w",
+            text_color=self._TEXT_PRIMARY,
+            font=ctk.CTkFont(size=16, weight="bold"),
         ).pack(side="left")
 
-        # 安全模式开关
-        self._safety_mode_var = tk.BooleanVar(value=True)
-        self._safety_toggle = tk.Checkbutton(
-            safety_header, text="启用", variable=self._safety_mode_var,
-            bg=t.get("bg_card", "#151d2b"),
-            fg=t.get("accent_emerald", "#34d399"),
-            selectcolor=t.get("bg_input", "#0f1520"),
-            activebackground=t.get("bg_card", "#151d2b"),
-            activeforeground=t.get("text_primary", "#f1f5f9"),
-            font=(UI_S_B), relief="flat",
-            command=self._on_change,
+        self._safety_mode_var = BooleanVar(value=True)
+        self._safety_switch = ctk.CTkSwitch(
+            safety_header, text="启用",
+            variable=self._safety_mode_var,
+            command=lambda: self._on_change(),
+            font=ctk.CTkFont(size=12),
+            text_color=self._SUCCESS,
+            progress_color=self._SUCCESS,
+            button_color=self._TEXT_DIM,
+            button_hover_color=self._TEXT_SECONDARY,
+            fg_color=self._BORDER,
         )
-        self._safety_toggle.pack(side="right")
+        self._safety_switch.pack(side="right")
 
-        tk.Label(
-            safety_container, text="限制累计电击时间的最高上限",
-            bg=t.get("bg_card", "#151d2b"),
-            fg=t.get("text_muted", "#475569"),
-            font=(UI_XS), anchor="w",
-        ).pack(fill="x", padx=12, pady=(0, 8))
+        ctk.CTkLabel(
+            safety_group, text="限制累计电击时间的最高上限",
+            text_color=self._TEXT_DIM, font=ctk.CTkFont(size=11),
+        ).pack(anchor="w", padx=16, pady=(0, 8))
 
-        # 滑块
-        dur_frame = tk.Frame(safety_container, bg=t.get("bg_card", "#151d2b"))
-        dur_frame.pack(fill="x", padx=12, pady=(0, 12))
+        # 安全时长滑块
+        dur_row = ctk.CTkFrame(safety_group, fg_color="transparent")
+        dur_row.pack(fill="x", padx=16, pady=(0, 12))
 
-        tk.Label(
-            dur_frame, text="最大累计时长",
-            bg=t.get("bg_card", "#151d2b"),
-            fg=t.get("text_dim", "#64748b"),
-            font=(UI_S),
+        ctk.CTkLabel(
+            dur_row, text="最大累计时长",
+            text_color=self._TEXT_DIM, font=ctk.CTkFont(size=12),
         ).pack(side="left")
 
-        self._safety_max_var = tk.IntVar(value=15)
-        self._safety_max_label = tk.Label(
-            dur_frame, text="15秒",
-            bg=t.get("bg_card", "#151d2b"),
-            fg=t.get("accent_orange", "#ffb74d"),
-            font=(MONO_M_B), width=5,
+        self._safety_max_var = IntVar(value=15)
+        self._safety_max_label = ctk.CTkLabel(
+            dur_row, text="15秒",
+            text_color=self._WARNING,
+            font=ctk.CTkFont(family="Consolas", size=14, weight="bold"),
         )
         self._safety_max_label.pack(side="right")
 
-        self._safety_max_scale = tk.Scale(
-            dur_frame, from_=5, to=60, orient="horizontal",
-            variable=self._safety_max_var, command=self._on_safety_max_change,
-            bg=t.get("bg_card", "#151d2b"),
-            fg=t.get("text_secondary", "#94a3b8"),
-            troughcolor=t.get("bg_slider_trough", "#1e293b"),
-            highlightthickness=0, sliderrelief="flat", length=140,
+        self._safety_max_slider = ctk.CTkSlider(
+            dur_row,
+            from_=5, to=60, number_of_steps=55,
+            variable=self._safety_max_var,
+            command=self._on_safety_max_change,
+            fg_color=self._BORDER,
+            progress_color=self._WARNING,
+            button_color=self._WARNING,
+            button_hover_color="#fcd34d",
+            width=160,
         )
-        self._safety_max_scale.pack(side="right", padx=(8, 8))
+        self._safety_max_slider.pack(side="right", padx=(8, 8))
+
+    # ─── 辅助构建方法 ─────────────────────────────────────────────────
+
+    def _build_limit_slider(self, parent, label_text: str, color: str, is_a: bool):
+        """构建通道上限滑块行"""
+        row = ctk.CTkFrame(parent, fg_color="transparent")
+        row.pack(fill="x", padx=16, pady=(0, 8))
+
+        ctk.CTkLabel(
+            row, text=label_text,
+            text_color=color, font=ctk.CTkFont(size=13, weight="bold"),
+        ).pack(side="left")
+
+        var = IntVar(value=200)
+        value_label = ctk.CTkLabel(
+            row, text="200",
+            text_color=color,
+            font=ctk.CTkFont(family="Consolas", size=14, weight="bold"),
+            width=40,
+        )
+        value_label.pack(side="right")
+
+        slider = ctk.CTkSlider(
+            row,
+            from_=0, to=200, number_of_steps=200,
+            variable=var,
+            command=lambda v, lbl=value_label: self._on_limit_change(v, lbl),
+            fg_color=self._BORDER,
+            progress_color=color,
+            button_color=color,
+            button_hover_color=color,
+            width=180,
+        )
+        slider.pack(side="right", padx=(8, 8))
+
+        if is_a:
+            self._a_limit_var = var
+            self._a_limit_label = value_label
+            self._a_limit_slider = slider
+        else:
+            self._b_limit_var = var
+            self._b_limit_label = value_label
+            self._b_limit_slider = slider
+
+    # ─── 内部回调 ─────────────────────────────────────────────────────
+
+    def _on_limit_change(self, value, label):
+        label.configure(text=str(int(value)))
+        self._on_change()
+
+    def _on_mode_change(self, _value):
+        self._on_change()
+
+    def _on_wf_mode_change(self, _value):
+        self._update_custom_wf_visibility()
+        self._on_change()
+
+    def _on_channel_change(self, _value):
+        self._on_change()
 
     def _on_dual_toggle(self):
         dual = self._dual_var.get()
         state = "disabled" if dual else "normal"
-        for rb in self._channel_rbs:
-            rb.configure(state=state)
-        self._on_change()
-
-    def _on_wf_mode_change(self):
-        self._update_custom_wf_visibility()
+        self._channel_seg.configure(state=state)
         self._on_change()
 
     def _on_safety_max_change(self, value):
-        self._safety_max_label.configure(text=f"{int(float(value))}秒")
+        self._safety_max_label.configure(text=f"{int(value)}秒")
         self._on_change()
 
     def _update_custom_wf_visibility(self):
-        if self._wf_var.get() == "custom":
-            self._custom_wf_group.pack(fill="x", padx=12, pady=(0, 12))
+        if self._wf_var.get() == "自定义":
+            self._custom_wf_frame.pack(fill="x", padx=16, pady=(0, 12))
         else:
-            self._custom_wf_group.pack_forget()
+            self._custom_wf_frame.pack_forget()
 
-    def _on_a_limit_change(self, value):
-        self._a_limit_label.configure(text=str(int(float(value))))
-        self._on_change()
-
-    def _on_b_limit_change(self, value):
-        self._b_limit_label.configure(text=str(int(float(value))))
-        self._on_change()
+    # ─── 公开 API ─────────────────────────────────────────────────────
 
     def get_a_limit(self) -> int:
         return self._a_limit_var.get()
@@ -484,16 +463,20 @@ class SettingsPanel(tk.Frame):
         self._b_limit_label.configure(text=str(value))
 
     def get_mode(self) -> str:
-        return self._mode_var.get()
+        label = self._mode_var.get()
+        return self._LABEL_TO_MODE.get(label, "instant")
 
     def set_mode(self, mode: str):
-        self._mode_var.set(mode)
+        label = self._MODE_TO_LABEL.get(mode, "一键开火")
+        self._mode_var.set(label)
 
     def get_waveform_mode(self) -> str:
-        return self._wf_var.get()
+        label = self._wf_var.get()
+        return self._WF_LABEL_TO_MODE.get(label, "library")
 
     def set_waveform_mode(self, mode: str):
-        self._wf_var.set(mode)
+        label = self._WF_TO_LABEL.get(mode, "波形库")
+        self._wf_var.set(label)
         self._update_custom_wf_visibility()
 
     def get_channel(self) -> str:
@@ -508,8 +491,7 @@ class SettingsPanel(tk.Frame):
     def set_dual_channel(self, dual: bool):
         self._dual_var.set(dual)
         state = "disabled" if dual else "normal"
-        for rb in self._channel_rbs:
-            rb.configure(state=state)
+        self._channel_seg.configure(state=state)
 
     def get_alternate_waveform(self) -> bool:
         return self._alternate_var.get()
@@ -518,11 +500,11 @@ class SettingsPanel(tk.Frame):
         self._alternate_var.set(alternate)
 
     def get_max_mode(self) -> bool:
-        return self._mode_var.get() == "max"
+        return self._mode_var.get() == "拉满"
 
     def set_max_mode(self, max_mode: bool):
         if max_mode:
-            self._mode_var.set("max")
+            self._mode_var.set("拉满")
 
     def get_custom_waveform(self) -> str:
         return self._custom_wf_var.get()
@@ -556,20 +538,19 @@ class SettingsPanel(tk.Frame):
                 if key in self._chatbox_toggles:
                     self._chatbox_toggles[key].set(value)
 
-    def set_theme_button_text(self, theme_name: str):
-        if hasattr(self, '_theme_btn'):
-            self._theme_btn.configure(text=theme_name)
+    def get_chatbox_toggles(self) -> dict:
+        return {k: v.get() for k, v in self._chatbox_toggles.items()}
 
-    def set_chatbox_enabled_callback(self, callback):
-        self._chatbox_enabled_callback = callback
+    def set_theme_button_text(self, theme_name: str):
+        """No-op: 主题切换已移除"""
+        pass
 
     def set_on_chatbox_enabled(self, callback):
         self._chatbox_enabled_callback = callback
 
-    def get_chatbox_toggles(self) -> dict:
-        return {k: v.get() for k, v in self._chatbox_toggles.items()}
+    def set_chatbox_enabled_callback(self, callback):
+        self._chatbox_enabled_callback = callback
 
-    # 安全模式相关方法
     def get_safety_mode(self) -> bool:
         return self._safety_mode_var.get()
 
@@ -599,55 +580,5 @@ class SettingsPanel(tk.Frame):
         self.set_strength(a, b)
 
     def apply_theme(self, theme: dict):
-        self._theme = theme
-        t = theme
-        self.configure(bg=t.get("bg_panel", "#111827"))
-        for w in self._get_all_widgets():
-            try:
-                bg = t.get("bg_card", "#151d2b")
-                fg = t.get("text_primary", "#f1f5f9")
-                if isinstance(w, tk.Scale):
-                    w.configure(bg=bg, fg=t.get("text_secondary", "#94a3b8"),
-                                troughcolor=t.get("bg_slider_trough", "#1e293b"))
-                elif isinstance(w, tk.Button):
-                    txt = str(w.cget("text"))
-                    if txt == "主题":
-                        w.configure(bg=t.get("bg_button", "#2563eb"), fg="#ffffff",
-                                    activebackground=t.get("bg_button_hover", "#3b82f6"))
-                    else:
-                        w.configure(bg=t.get("bg_button", "#2563eb"), fg="#ffffff",
-                                    activebackground=t.get("bg_button_hover", "#3b82f6"))
-                elif isinstance(w, tk.Entry):
-                    w.configure(bg=t.get("bg_input", "#0f1520"), fg=fg, insertbackground=fg,
-                                highlightbackground=t.get("border_color", "#1e293b"))
-                elif isinstance(w, tk.Text):
-                    w.configure(bg=t.get("bg_input", "#0f1520"), fg=fg, insertbackground=fg,
-                                highlightbackground=t.get("border_color", "#1e293b"))
-                elif isinstance(w, tk.Frame):
-                    w.configure(bg=bg)
-                elif isinstance(w, tk.Label):
-                    current_fg = str(w.cget("fg"))
-                    if current_fg in ["#f1f5f9", "#e6edf3"]:
-                        w.configure(bg=bg, fg=fg)
-                    else:
-                        w.configure(bg=bg, fg=t.get("text_dim", "#64748b"))
-                elif isinstance(w, tk.Radiobutton):
-                    state = "disabled" if (hasattr(self, '_dual_var') and self._dual_var.get() and w in getattr(self, '_channel_rbs', [])) else "normal"
-                    w.configure(bg=bg, fg=t.get("text_secondary", "#94a3b8"),
-                                selectcolor=t.get("bg_input", "#0f1520"),
-                                activebackground=bg, state=state)
-                elif isinstance(w, tk.Checkbutton):
-                    w.configure(bg=bg, fg=t.get("text_secondary", "#94a3b8"),
-                                selectcolor=t.get("bg_input", "#0f1520"),
-                                activebackground=bg)
-            except (tk.TclError, KeyError):
-                pass
-
-    def _get_all_widgets(self):
-        widgets = []
-        stack = [self]
-        while stack:
-            w = stack.pop()
-            widgets.append(w)
-            stack.extend(w.winfo_children())
-        return widgets
+        """No-op: 配色已硬编码"""
+        pass

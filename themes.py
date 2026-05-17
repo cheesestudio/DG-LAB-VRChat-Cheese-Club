@@ -1,157 +1,63 @@
-"""UI主题定义 - 专业级暗黑/明亮风格"""
+THEME = {
+    # 背景层次 (从深到浅)
+    "bg_base": "#111111",       # 最底层
+    "bg_panel": "#1a1a1a",      # 面板/卡片背景
+    "bg_elevated": "#242424",   # 悬浮/弹出层
+    "bg_input": "#161616",      # 输入框背景
+    "bg_hover": "#2d2d2d",      # 悬停态
 
+    # 边框
+    "border": "#333333",
+    "border_focus": "#d4a054",
 
-THEMES = {
-    "dark": {
-        "name": "午夜蓝",
-        # 主背景层次
-        "bg_main": "#0a0e1a",
-        "bg_panel": "#111827",
-        "bg_header": "#1a2332",
-        "bg_input": "#0f1520",
-        "bg_card": "#151d2b",
-        "bg_card_border": "#1e293b",
-        # 按钮系统
-        "bg_button": "#2563eb",
-        "bg_button_hover": "#3b82f6",
-        "bg_button_active": "#1d4ed8",
-        "bg_button_danger": "#dc2626",
-        "bg_button_danger_hover": "#ef4444",
-        "bg_button_success": "#059669",
-        "bg_button_success_hover": "#10b981",
-        # 滑块
-        "bg_slider_trough": "#1e293b",
-        "bg_slider_active": "#3b82f6",
-        # 文字层次
-        "text_primary": "#f1f5f9",
-        "text_secondary": "#94a3b8",
-        "text_dim": "#64748b",
-        "text_muted": "#475569",
-        "text_inverse": "#0f172a",
-        # 强调色系统
-        "accent_blue": "#3b82f6",
-        "accent_cyan": "#06b6d4",
-        "accent_green": "#10b981",
-        "accent_emerald": "#34d399",
-        "accent_orange": "#f59e0b",
-        "accent_amber": "#fbbf24",
-        "accent_red": "#ef4444",
-        "accent_rose": "#f43f5e",
-        "accent_purple": "#8b5cf6",
-        "accent_violet": "#a78bfa",
-        # 边框系统
-        "border_color": "#1e293b",
-        "border_light": "#334155",
-        "border_focus": "#3b82f6",
-        # 阴影和深度
-        "shadow": "#020617",
-        "shadow_light": "#0f172a",
-        # 控制台
-        "console_bg": "#0c1017",
-        "console_text": "#94a3b8",
-        "console_error": "#f87171",
-        "console_warning": "#fbbf24",
-        "console_success": "#34d399",
-        "console_info": "#60a5fa",
-        # 波形图
-        "waveform_bg": "#0a0f1a",
-        "waveform_line": "#3b82f6",
-        "waveform_grid": "#1e293b",
-        "waveform_fill": "#1e40af20",
-        # 二维码
-        "qr_border": "#1e293b",
-        "qr_background": "#ffffff",
-        # 渐变
-        "gradient_top": "#111827",
-        "gradient_bottom": "#0a0e1a",
-        # 状态指示
-        "status_online": "#10b981",
-        "status_offline": "#6b7280",
-        "status_warning": "#f59e0b",
-        "status_error": "#ef4444",
-        # 特殊效果
-        "glow_blue": "#3b82f640",
-        "glow_green": "#10b98140",
-        "glow_orange": "#f59e0b40",
-    },
-    "light": {
-        "name": "珍珠白",
-        # 主背景层次
-        "bg_main": "#f8fafc",
-        "bg_panel": "#ffffff",
-        "bg_header": "#f1f5f9",
-        "bg_input": "#f8fafc",
-        "bg_card": "#ffffff",
-        "bg_card_border": "#e2e8f0",
-        # 按钮系统
-        "bg_button": "#2563eb",
-        "bg_button_hover": "#3b82f6",
-        "bg_button_active": "#1d4ed8",
-        "bg_button_danger": "#dc2626",
-        "bg_button_danger_hover": "#ef4444",
-        "bg_button_success": "#059669",
-        "bg_button_success_hover": "#10b981",
-        # 滑块
-        "bg_slider_trough": "#e2e8f0",
-        "bg_slider_active": "#3b82f6",
-        # 文字层次
-        "text_primary": "#0f172a",
-        "text_secondary": "#475569",
-        "text_dim": "#64748b",
-        "text_muted": "#94a3b8",
-        "text_inverse": "#f8fafc",
-        # 强调色系统
-        "accent_blue": "#2563eb",
-        "accent_cyan": "#0891b2",
-        "accent_green": "#059669",
-        "accent_emerald": "#059669",
-        "accent_orange": "#d97706",
-        "accent_amber": "#d97706",
-        "accent_red": "#dc2626",
-        "accent_rose": "#e11d48",
-        "accent_purple": "#7c3aed",
-        "accent_violet": "#7c3aed",
-        # 边框系统
-        "border_color": "#e2e8f0",
-        "border_light": "#f1f5f9",
-        "border_focus": "#2563eb",
-        # 阴影和深度
-        "shadow": "#94a3b8",
-        "shadow_light": "#e2e8f0",
-        # 控制台
-        "console_bg": "#f8fafc",
-        "console_text": "#475569",
-        "console_error": "#dc2626",
-        "console_warning": "#d97706",
-        "console_success": "#059669",
-        "console_info": "#2563eb",
-        # 波形图
-        "waveform_bg": "#f8fafc",
-        "waveform_line": "#2563eb",
-        "waveform_grid": "#e2e8f0",
-        "waveform_fill": "#2563eb10",
-        # 二维码
-        "qr_border": "#e2e8f0",
-        "qr_background": "#ffffff",
-        # 渐变
-        "gradient_top": "#ffffff",
-        "gradient_bottom": "#f8fafc",
-        # 状态指示
-        "status_online": "#059669",
-        "status_offline": "#9ca3af",
-        "status_warning": "#d97706",
-        "status_error": "#dc2626",
-        # 特殊效果
-        "glow_blue": "#2563eb20",
-        "glow_green": "#05966920",
-        "glow_orange": "#d9770620",
-    },
+    # 文字层次
+    "text": "#e4e4e7",          # 主文字
+    "text_secondary": "#a1a1aa",  # 次要文字
+    "text_dim": "#71717a",      # 暗淡文字
+    "text_muted": "#52525b",    # 最暗文字/占位符
+
+    # 强调色
+    "accent": "#d4a054",        # 主强调 (琥珀金)
+    "accent_hover": "#b8893e",  # 强调悬停
+    "accent_muted": "#9c7232",  # 强调按下
+
+    # 语义色
+    "success": "#22c55e",
+    "success_hover": "#16a34a",
+    "danger": "#ef4444",
+    "danger_hover": "#dc2626",
+    "warning": "#f59e0b",
+
+    # 通道色
+    "channel_a": "#34d399",     # 翠绿
+    "channel_b": "#fbbf24",     # 琥珀
+
+    # 控制台
+    "console_bg": "#0d0d0d",
+    "console_text": "#a1a1aa",
+    "console_info": "#60a5fa",
+    "console_warning": "#fbbf24",
+    "console_error": "#f87171",
+    "console_success": "#34d399",
+    "console_shock": "#a78bfa",
+
+    # 波形
+    "waveform_bg": "#111111",
+    "waveform_grid": "#242424",
+    "waveform_line_a": "#34d399",
+    "waveform_line_b": "#fbbf24",
+
+    # 状态
+    "status_online": "#22c55e",
+    "status_offline": "#52525b",
+    "status_warning": "#f59e0b",
+    "status_error": "#ef4444",
 }
 
 
 def get_theme(name: str = "dark") -> dict:
-    return THEMES.get(name, THEMES["dark"])
+    return THEME
 
 
 def get_theme_names() -> list:
-    return list(THEMES.keys())
+    return ["dark"]

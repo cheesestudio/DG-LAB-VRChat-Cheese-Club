@@ -21,7 +21,8 @@ class WaveformPanel(tk.Frame):
 
     def __init__(self, master, theme: dict = None, **kwargs):
         self._theme = theme or {}
-        super().__init__(master, bg=self._theme.get("bg_panel", "#1a1a2e"), **kwargs)
+        kwargs.pop("bg", None)
+        super().__init__(master, bg="#111111", **kwargs)
 
         self._history = collections.deque(maxlen=600)  # 15s @ 25ms per sample
         self._visible_seconds = 12
@@ -45,17 +46,17 @@ class WaveformPanel(tk.Frame):
         t = self._theme
 
         # Header
-        header = tk.Frame(self, bg=t.get("bg_header", "#16213e"))
+        header = tk.Frame(self, bg="#111111")
         header.pack(fill="x", padx=2, pady=(2, 0))
         tk.Label(
-            header, text="波形监视", bg=t.get("bg_header", "#16213e"),
-            fg=t.get("text_primary", "#e0e0e0"),
+            header, text="波形监视", bg="#111111",
+            fg="#e4e4e7",
             font=(UI_M_B), anchor="w",
         ).pack(side="left", padx=8, pady=4)
 
         self._status_label = tk.Label(
-            header, text="未连接", bg=t.get("bg_header", "#16213e"),
-            fg=t.get("text_muted", "#666666"),
+            header, text="未连接", bg="#111111",
+            fg="#52525b",
             font=(UI_S), anchor="e",
         )
         self._status_label.pack(side="right", padx=8, pady=4)
